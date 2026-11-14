@@ -1,0 +1,146 @@
+.page {
+    box-sizing: border-box;
+    min-height: 100vh;
+    padding: 32rpx 32rpx 64rpx;
+}
+
+.card {
+    box-sizing: border-box;
+    border-radius: 24rpx;
+    border: 2rpx solid rgba(232, 176, 75, 0.22);
+    background: rgba(26, 30, 41, 0.85);
+    padding: 32rpx;
+    margin-bottom: 24rpx;
+}
+
+.card-label {
+    display: block;
+    font-size: 22rpx;
+    letter-spacing: 4rpx;
+    color: rgba(232, 176, 75, 0.6);
+    margin-bottom: 20rpx;
+}
+
+.pos-text {
+    display: block;
+    font-size: 26rpx;
+    color: #f4ead6;
+    line-height: 1.6;
+}
+
+.pos-actions {
+    display: flex;
+    margin-top: 20rpx;
+    gap: 16rpx;
+}
+
+.btn-mini {
+    font-size: 24rpx;
+}
+
+.pick-wrap {
+    margin-top: 24rpx;
+}
+
+.pick-map {
+    width: 100%;
+    height: 420rpx;
+    border-radius: 16rpx;
+    position: relative;
+}
+
+.pick-center-pin {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 22rpx;
+    height: 22rpx;
+    margin-left: -11rpx;
+    margin-top: -11rpx;
+    border-radius: 50%;
+    background: #e8b04b;
+    border: 4rpx solid #1a1408;
+}
+
+.pick-tip {
+    display: block;
+    margin-top: 14rpx;
+    font-size: 24rpx;
+    color: rgba(244, 234, 214, 0.5);
+    text-align: center;
+}
+
+.btn-use-center {
+    margin-top: 16rpx;
+    width: 100%;
+    font-size: 28rpx;
+}
+
+.field-input {
+    box-sizing: border-box;
+    width: 100%;
+    height: 84rpx;
+    padding: 0 24rpx;
+    border-radius: 16rpx;
+    background: rgba(255, 255, 255, 0.06);
+    color: #f4ead6;
+    font-size: 28rpx;
+    margin-bottom: 20rpx;
+}
+
+.field-textarea {
+    box-sizing: border-box;
+    width: 100%;
+    height: 160rpx;
+    padding: 20rpx 24rpx;
+    border-radius: 16rpx;
+    background: rgba(255, 255, 255, 0.06);
+    color: #f4ead6;
+    font-size: 28rpx;
+}
+
+.photo-area {
+    width: 100%;
+    height: 320rpx;
+    border-radius: 16rpx;
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.photo-img {
+    width: 100%;
+    height: 100%;
+}
+
+.photo-placeholder {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12rpx;
+}
+
+.photo-plus {
+    font-size: 64rpx;
+    color: #e8b04b;
+}
+
+.photo-tip {
+    font-size: 24rpx;
+    color: rgba(244, 234, 214, 0.5);
+}
+
+.note-text {
+    display: block;
+    margin-top: 16rpx;
+    font-size: 22rpx;
+    color: rgba(244, 234, 214, 0.4);
+    line-height: 1.5;
+}
+
+.btn-submit {
+    width: 100%;
+    font-size: 32rpx;
+    margin-top: 8rpx;
+}

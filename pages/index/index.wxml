@@ -1,0 +1,22 @@
+<view class="page">
+    <view class="hero">
+        <text class="eyebrow">CITY TREASURE HUNT</text>
+        <text class="title">{{appName}}</text>
+        <text class="subtitle">{{tagline}}</text>
+    </view>
+
+    <view class="entry-card">
+        <view class="entry-main" bindtap="goBury">
+            <text class="entry-title">我要藏宝</text>
+            <text class="entry-desc">拍下现场照，把宝物埋在你的脚下，出一道谜题给全城的人</text>
+        </view>
+        <view class="entry-main entry-main-seek" bindtap="goSeek">
+            <text class="entry-title">我要寻宝</text>
+            <text class="entry-desc">看看 300 米内埋着什么，读谜题、走到点、把它带走</text>
+        </view>
+    </view>
+
+    <view class="stat-line">
+        <text class="stat-text">当前埋藏中的宝物：{{buriedCount}}</text>
+    </view>
+</view>

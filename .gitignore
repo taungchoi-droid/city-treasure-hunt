@@ -1,0 +1,6 @@
+# WorkBuddy 本地运行时数据（不属于小程序源码）
+.workbuddy/
+
+# 系统文件
+.DS_Store
+Thumbs.db

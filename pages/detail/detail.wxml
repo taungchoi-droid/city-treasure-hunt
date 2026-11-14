@@ -1,0 +1,47 @@
+<view class="page" wx:if="{{treasure}}">
+    <view class="head-card">
+        <text class="t-name">{{treasure.name}}</text>
+        <text class="t-meta">埋于 {{treasure.buriedAtText}}</text>
+        <view class="riddle-box">
+            <text class="riddle-label">谜题</text>
+            <text class="riddle-text">{{treasure.riddle}}</text>
+        </view>
+        <image wx:if="{{treasure.photoPath}}" class="t-photo" src="{{treasure.photoPath}}" mode="aspectFill" />
+    </view>
+
+    <view class="dist-card">
+        <block wx:if="{{positionReady}}">
+            <text class="dist-value {{inRange ? 'dist-ok' : ''}}" wx:if="{{distText}}">{{distText}}</text>
+            <text class="dist-tip">{{inRange ? '已进入核销范围，可以行动了' : '走到 30 米内解锁操作'}}</text>
+        </block>
+        <block wx:else>
+            <text class="dist-tip">还没拿到你的位置。先在地图页定位，或点击下方按钮重试。</text>
+        </block>
+        <button class="btn-ghost btn-refresh" size="mini" bindtap="reLocate">重新定位</button>
+    </view>
+
+    <view class="actions-card">
+        <button class="btn-primary action-btn" disabled="{{!inRange || taking}}" bindtap="takeTreasure">
+            我已带走（全城下架）
+        </button>
+        <view class="hint-area">
+            <textarea
+                class="hint-input"
+                placeholder="不想带走？追加一条提示，让它继续埋着"
+                value="{{hintInput}}"
+                bindinput="onHintInput"
+                maxlength="100" />
+            <button class="btn-ghost action-btn" disabled="{{!inRange || hintSending}}" bindtap="submitHint">
+                继续埋藏 · 追加提示
+            </button>
+        </view>
+    </view>
+
+    <view class="hints-card" wx:if="{{treasure.hints.length > 0}}">
+        <text class="panel-label">寻宝人留下的提示（{{treasure.hints.length}}）</text>
+        <view class="hint-row" wx:for="{{treasure.hints}}" wx:key="id">
+            <text class="hint-text">{{item.text}}</text>
+            <text class="hint-time">{{item.timeText}}</text>
+        </view>
+    </view>
+</view>

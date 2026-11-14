@@ -1,0 +1,27 @@
+{
+  "pages": [
+    "pages/index/index",
+    "pages/map/map",
+    "pages/detail/detail",
+    "pages/bury/bury"
+  ],
+  "window": {
+    "navigationBarTitleText": "城市寻宝",
+    "navigationBarBackgroundColor": "#0f1420",
+    "navigationBarTextStyle": "white",
+    "backgroundColor": "#0f1420",
+    "backgroundTextStyle": "light"
+  },
+  "permission": {
+    "scope.userLocation": {
+      "desc": "用于展示附近宝物，并判断你与宝物的距离"
+    }
+  },
+  "requiredPrivateInfos": [
+    "getLocation",
+    "startLocationUpdate"
+  ],
+  "style": "v2",
+  "sitemapLocation": "sitemap.json",
+  "lazyCodeLoading": "requiredComponents"
+}

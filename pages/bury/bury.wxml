@@ -1,0 +1,56 @@
+<view class="page">
+    <!-- 位置 -->
+    <view class="card">
+        <text class="card-label">埋宝位置</text>
+        <text class="pos-text">{{positionReady ? posText : (manualMode ? posText : '正在定位…')}}</text>
+        <view class="pos-actions">
+            <button class="btn-ghost btn-mini" size="mini" bindtap="reLocate">重新定位</button>
+            <button wx:if="{{!showPickMap}}" class="btn-ghost btn-mini" size="mini" bindtap="openPickMap">手动选点</button>
+        </view>
+
+        <view wx:if="{{showPickMap}}" class="pick-wrap">
+            <map
+                id="pickMap"
+                class="pick-map"
+                latitude="{{pickLatitude}}"
+                longitude="{{pickLongitude}}"
+                scale="16">
+                <cover-view class="pick-center-pin"></cover-view>
+            </map>
+            <text class="pick-tip">拖动地图，让中心对准埋宝点，然后确认</text>
+            <button class="btn-primary btn-use-center" bindtap="useMapCenter">以地图中心为埋宝点</button>
+        </view>
+    </view>
+
+    <!-- 命名与谜题 -->
+    <view class="card">
+        <text class="card-label">宝物信息</text>
+        <input
+            class="field-input"
+            placeholder="宝物名称（如：巷口的老徽章）"
+            value="{{name}}"
+            bindinput="onNameInput"
+            maxlength="20" />
+        <textarea
+            class="field-textarea"
+            placeholder="写一道谜题，指向你身边的公开地标（谜题不透露宝物本身）"
+            value="{{riddle}}"
+            bindinput="onRiddleInput"
+            maxlength="120" />
+    </view>
+
+    <!-- 拍照确认 -->
+    <view class="card">
+        <text class="card-label">现场照（必填）</text>
+        <view class="photo-area" bindtap="takePhoto">
+            <image wx:if="{{photoPath}}" class="photo-img" src="{{photoPath}}" mode="aspectFill" catchtap="previewPhoto" />
+            <view wx:else class="photo-placeholder">
+                <text class="photo-plus">＋</text>
+                <text class="photo-tip">打开相机，拍下藏宝现场</text>
+            </view>
+        </view>
+        <text class="note-text">照片仅存于本机用于到场核对；坐标为 GCJ-02 火星坐标</text>
+    </view>
+
+    <button class="btn-primary btn-submit" disabled="{{submitting}}" bindtap="submit">埋下宝物</button>
+</view>

@@ -1,0 +1,140 @@
+.page {
+    box-sizing: border-box;
+    min-height: 100vh;
+    padding: 32rpx 32rpx 64rpx;
+}
+
+.head-card,
+.dist-card,
+.actions-card,
+.hints-card {
+    box-sizing: border-box;
+    border-radius: 24rpx;
+    border: 2rpx solid rgba(232, 176, 75, 0.22);
+    background: rgba(26, 30, 41, 0.85);
+    padding: 32rpx;
+    margin-bottom: 24rpx;
+}
+
+.t-name {
+    display: block;
+    font-size: 40rpx;
+    font-weight: 700;
+    color: #e8b04b;
+}
+
+.t-meta {
+    display: block;
+    margin-top: 10rpx;
+    font-size: 24rpx;
+    color: rgba(244, 234, 214, 0.45);
+}
+
+.riddle-box {
+    margin-top: 24rpx;
+    padding: 24rpx;
+    border-radius: 16rpx;
+    background: rgba(232, 176, 75, 0.08);
+}
+
+.riddle-label {
+    display: block;
+    font-size: 22rpx;
+    letter-spacing: 4rpx;
+    color: rgba(232, 176, 75, 0.6);
+}
+
+.riddle-text {
+    display: block;
+    margin-top: 12rpx;
+    font-size: 30rpx;
+    line-height: 1.7;
+    color: #f4ead6;
+}
+
+.t-photo {
+    width: 100%;
+    height: 320rpx;
+    border-radius: 16rpx;
+    margin-top: 24rpx;
+}
+
+.dist-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 28rpx;
+}
+
+.dist-value {
+    font-size: 52rpx;
+    font-weight: 800;
+    color: #f4ead6;
+    font-variant-numeric: tabular-nums;
+}
+
+.dist-ok {
+    color: #4ecb8d;
+}
+
+.dist-tip {
+    margin-top: 10rpx;
+    font-size: 24rpx;
+    color: rgba(244, 234, 214, 0.55);
+    text-align: center;
+    line-height: 1.6;
+}
+
+.btn-refresh {
+    margin-top: 20rpx;
+}
+
+.action-btn {
+    width: 100%;
+    font-size: 30rpx;
+}
+
+.hint-area {
+    margin-top: 24rpx;
+    padding-top: 24rpx;
+    border-top: 1rpx solid rgba(232, 176, 75, 0.18);
+}
+
+.hint-input {
+    box-sizing: border-box;
+    width: 100%;
+    height: 140rpx;
+    padding: 20rpx;
+    border-radius: 16rpx;
+    background: rgba(255, 255, 255, 0.06);
+    color: #f4ead6;
+    font-size: 26rpx;
+    margin-bottom: 20rpx;
+}
+
+.panel-label {
+    display: block;
+    font-size: 22rpx;
+    letter-spacing: 4rpx;
+    color: rgba(232, 176, 75, 0.6);
+    margin-bottom: 16rpx;
+}
+
+.hint-row {
+    padding: 16rpx 0;
+    border-top: 1rpx solid rgba(232, 176, 75, 0.14);
+    display: flex;
+    flex-direction: column;
+}
+
+.hint-text {
+    font-size: 28rpx;
+    line-height: 1.6;
+    color: #f4ead6;
+}
+
+.hint-time {
+    margin-top: 8rpx;
+    font-size: 22rpx;
+    color: rgba(244, 234, 214, 0.4);
+}
