@@ -177,6 +177,12 @@ function uploadPhoto(localPath, session) {
                 url: signed.data.signedUrl,
                 filePath: localPath,
                 name: 'file',
+                // wx.uploadFile 绕过了 SDK 请求层，必须手动带上与 SDK 相同的鉴权头：
+                // 应用标识（publishableKey）+ 当前会话 token，否则网关返回 401 MISSING_CREDENTIALS
+                header: {
+                    'x-wb-webapp-access-key': cloudMod.publicConfig.publishableKey,
+                    'Authorization': 'Bearer ' + session.accessToken
+                },
                 formData: { cacheControl: '3600' },
                 success: function (res) {
                     if (res.statusCode >= 200 && res.statusCode < 300) {

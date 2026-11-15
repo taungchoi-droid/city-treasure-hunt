@@ -15,4 +15,4 @@ var cloud = cloudSdk.createMiniProgramWorkBuddyCloud({
     wx: diag.createDiagnosticWx(wx)
 });
 
-module.exports = { cloud: cloud };
+module.exports = { cloud: cloud, publicConfig: publicConfig };
