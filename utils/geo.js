@@ -22,7 +22,10 @@ function fmtDist(m) {
 }
 
 function relTime(ts) {
-  var diff = Date.now() - ts;
+  // 兼容毫秒时间戳与云端返回的 ISO 时间字符串
+  var t = (typeof ts === 'number') ? ts : Date.parse(ts);
+  if (!isFinite(t)) return '';
+  var diff = Date.now() - t;
   var min = Math.floor(diff / 60000);
   if (min < 1) return '刚刚';
   if (min < 60) return min + ' 分钟前';

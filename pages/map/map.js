@@ -23,6 +23,7 @@ Page({
     onLoad: function () {
         this._markerIndex = []; // 数字 id -> treasure.id
         this._lastRefreshAt = 0;
+        this._fetching = false;
         this.locate();
     },
 
@@ -115,7 +116,16 @@ Page({
             this.setData({ markers: [], circles: [], nearbyList: [], nearbyCount: 0 });
             return;
         }
-        var near = db.nearby(player, config.DISCOVER_RADIUS);
+        if (this._fetching) return; // 云端请求进行中，跳过本轮
+        this._fetching = true;
+        var that = this;
+        db.nearby(player, config.DISCOVER_RADIUS).then(function (near) {
+            that._fetching = false;
+            that.renderNearby(near);
+        });
+    },
+
+    renderNearby: function (near) {
         var markers = [];
         var circles = [];
         var list = [];

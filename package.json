@@ -1,0 +1,8 @@
+{
+  "name": "city-treasure-hunt",
+  "version": "0.2.0",
+  "description": "城市寻宝：双角色藏宝/寻宝微信小程序（WorkBuddy 云服务后台）",
+  "dependencies": {
+    "@tencent-ai/workbuddy-cloud-sdk": "dev"
+  }
+}

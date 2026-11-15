@@ -6,7 +6,13 @@
             <text class="riddle-label">谜题</text>
             <text class="riddle-text">{{treasure.riddle}}</text>
         </view>
-        <image wx:if="{{treasure.photoPath}}" class="t-photo" src="{{treasure.photoPath}}" mode="aspectFill" />
+        <block wx:if="{{treasure.photoPath}}">
+            <image wx:if="{{photoUrl}}" class="t-photo" src="{{photoUrl}}" mode="aspectFill" bindtap="previewPhoto" />
+            <view wx:elif="{{needLogin}}" class="photo-login">
+                <text class="photo-login-tip">登录后可查看藏宝现场照</text>
+                <button class="btn-ghost" size="mini" bindtap="onLoginTap">微信一键登录</button>
+            </view>
+        </block>
     </view>
 
     <view class="dist-card">

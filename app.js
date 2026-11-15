@@ -1,5 +1,3 @@
-var db = require('./utils/db');
-
 App({
   globalData: {
     appName: '城市寻宝',
@@ -7,6 +5,6 @@ App({
     lastLocation: null
   },
   onLaunch: function () {
-    db.getUid();
+    // 云端版：玩家身份由 WorkBuddy 云会话提供（写操作时在页面内触发登录），启动不再生成本地 uid
   }
 });

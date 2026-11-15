@@ -1,6 +1,10 @@
 # WorkBuddy 本地运行时数据（不属于小程序源码）
 .workbuddy/
 
+# npm 依赖（发布流程会执行构建 npm，无需入库）
+node_modules/
+miniprogram_npm/
+
 # 系统文件
 .DS_Store
 Thumbs.db

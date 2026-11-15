@@ -138,3 +138,16 @@
     font-size: 22rpx;
     color: rgba(244, 234, 214, 0.4);
 }
+
+.photo-login {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12rpx;
+    padding: 30rpx 0 10rpx;
+}
+
+.photo-login-tip {
+    font-size: 24rpx;
+    color: rgba(244, 234, 214, 0.55);
+}

@@ -1,9 +1,13 @@
 // 宝物详情：谜题 + 提示列表 + 两个按距离解锁的操作按钮
-// 硬规则：「我已带走」必须数据层写成功后才改 UI；onShow 时重新拉状态，处理"已被别人带走"
+// 云端版规则：
+// - 「我已带走」必须服务端 RPC 成功后才改 UI；抢宝冲突由数据库原子裁决
+// - 定时器用缓存算距离，每 12 秒向云端重拉一次状态，处理"已被别人带走"
+// - 现场照存 shared 云存储，登录后用短时签名链接展示
 var config = require('../../utils/config');
 var db = require('../../utils/db');
 var geo = require('../../utils/geo');
 var sec = require('../../utils/sec');
+var auth = require('../../utils/auth');
 
 var app = getApp();
 
@@ -11,6 +15,8 @@ Page({
     data: {
         id: '',
         treasure: null,
+        photoUrl: '',
+        needLogin: false,    // 有现场照但未登录
         distText: '',
         inRange: false,      // 是否进入核销半径
         positionReady: false,
@@ -21,6 +27,8 @@ Page({
 
     onLoad: function (options) {
         this.setData({ id: options.id || '' });
+        this._treasure = null;
+        this._lastStatusAt = 0;
         this.loadTreasure();
     },
 
@@ -40,33 +48,70 @@ Page({
     },
 
     loadTreasure: function () {
-        var t = db.get(this.data.id);
-        if (!t || t.status !== 'buried') {
-            wx.showToast({ title: '宝物已不在了', icon: 'none' });
-            setTimeout(function () { wx.navigateBack({}); }, 600);
-            return;
-        }
-        this.setData({
-            treasure: {
-                name: t.name,
-                riddle: t.riddle,
-                photoPath: t.photoPath,
-                hints: t.hints.map(function (h, idx) {
-                    return { id: 'h' + idx, text: h.text, timeText: geo.relTime(h.at) };
-                }),
-                buriedAtText: geo.relTime(t.createdAt)
+        var that = this;
+        db.get(this.data.id).then(function (t) {
+            if (!t || t.status !== 'buried') {
+                that.stopTimer();
+                wx.showToast({ title: '宝物已不在了', icon: 'none' });
+                setTimeout(function () { wx.navigateBack({}); }, 600);
+                return;
             }
+            that._treasure = t;
+            that._lastStatusAt = Date.now();
+            that.setData({
+                treasure: {
+                    name: t.name,
+                    riddle: t.riddle,
+                    photoPath: t.photoPath,
+                    hints: t.hints.map(function (h, idx) {
+                        return { id: 'h' + idx, text: h.text, timeText: geo.relTime(h.at) };
+                    }),
+                    buriedAtText: geo.relTime(t.createdAt)
+                }
+            });
+            that.refreshDistance();
+            that.loadPhoto();
         });
     },
 
-    /* ---------- 距离与核销判定 ---------- */
+    /* ---------- 现场照（云存储签名链接，需登录） ---------- */
+    loadPhoto: function () {
+        var that = this;
+        if (!this._treasure || !this._treasure.photoPath) return;
+        auth.getSession().then(function (session) {
+            if (!session) {
+                that.setData({ photoUrl: '', needLogin: true });
+                return;
+            }
+            that.setData({ needLogin: false });
+            db.photoUrl(that._treasure.photoPath).then(function (url) {
+                that.setData({ photoUrl: url || '' });
+            });
+        });
+    },
+
+    onLoginTap: function () {
+        var that = this;
+        auth.wechatLogin().then(function (r) {
+            if (!r.ok) {
+                wx.showToast({ title: r.msg, icon: 'none' });
+                return;
+            }
+            that.setData({ needLogin: false });
+            that.loadPhoto();
+        });
+    },
+
+    previewPhoto: function () {
+        if (this.data.photoUrl) {
+            wx.previewImage({ urls: [this.data.photoUrl] });
+        }
+    },
+
+    /* ---------- 距离与核销判定（用缓存，不请求服务端） ---------- */
     refreshDistance: function () {
-        var t = db.get(this.data.id);
+        var t = this._treasure;
         if (!t || t.status !== 'buried') {
-            this.stopTimer();
-            wx.showToast({ title: '宝物已被人带走', icon: 'none' });
-            var that = this;
-            setTimeout(function () { that.loadTreasure(); }, 500);
             return;
         }
         var player = app.globalData.lastLocation;
@@ -85,13 +130,15 @@ Page({
     startTimer: function () {
         var that = this;
         this.stopTimer();
+        var ticks = 0;
         this._timer = setInterval(function () {
-            var t = db.get(that.data.id);
-            if (!t || t.status !== 'buried') {
+            ticks++;
+            // 每 6 轮（12 秒）向云端重拉一次状态，其余轮次只刷新距离
+            if (ticks % 6 === 0) {
                 that.loadTreasure();
-                return;
+            } else {
+                that.refreshDistance();
             }
-            that.refreshDistance();
         }, 2000);
     },
 
@@ -121,7 +168,7 @@ Page({
         });
     },
 
-    /* ---------- 操作一：带走 ---------- */
+    /* ---------- 操作一：带走（服务端原子判定） ---------- */
     takeTreasure: function () {
         var that = this;
         if (!this.data.positionReady) {
@@ -133,21 +180,30 @@ Page({
         if (this.data.taking) return;
         this.setData({ taking: true });
 
-        // 先落库，成功后才改 UI
-        var result = db.markTaken(this.data.id);
-        this.setData({ taking: false });
-        if (result.ok) {
-            wx.showToast({ title: '宝物归你了！', icon: 'success' });
-            setTimeout(function () {
-                wx.reLaunch({ url: '/pages/map/map' });
-            }, 800);
-        } else if (result.reason === 'gone') {
-            wx.showToast({ title: '手慢了，宝物刚被别人带走', icon: 'none' });
-            this.stopTimer();
-            setTimeout(function () { that.loadTreasure(); }, 500);
-        } else {
-            wx.showToast({ title: '宝物不存在', icon: 'none' });
-        }
+        auth.ensureLogin().then(function (session) {
+            if (!session) {
+                that.setData({ taking: false });
+                return wx.showToast({ title: '微信登录后才能带走宝物', icon: 'none' });
+            }
+            return db.markTaken(that.data.id).then(function (result) {
+                that.setData({ taking: false });
+                if (result.ok) {
+                    that.stopTimer();
+                    wx.showToast({ title: '宝物归你了！', icon: 'success' });
+                    setTimeout(function () {
+                        wx.reLaunch({ url: '/pages/map/map' });
+                    }, 800);
+                } else if (result.reason === 'gone') {
+                    wx.showToast({ title: '手慢了，宝物刚被别人带走', icon: 'none' });
+                    that.stopTimer();
+                    that.loadTreasure();
+                } else if (result.reason === 'missing') {
+                    wx.showToast({ title: '宝物不存在', icon: 'none' });
+                } else {
+                    wx.showToast({ title: result.msg || '操作失败，请重试', icon: 'none' });
+                }
+            });
+        });
     },
 
     /* ---------- 操作二：继续埋藏，追加提示 ---------- */
@@ -174,18 +230,27 @@ Page({
         if (this.data.hintSending) return;
         this.setData({ hintSending: true });
 
-        var result = db.addHint(this.data.id, hint);
-        this.setData({ hintSending: false });
-        if (result.ok) {
-            wx.showToast({ title: '提示已追加，宝物继续埋着', icon: 'none' });
-            this.setData({ hintInput: '' });
-            this.loadTreasure();
-        } else if (result.reason === 'gone') {
-            wx.showToast({ title: '宝物刚被别人带走', icon: 'none' });
-            this.stopTimer();
-            setTimeout(function () { that.loadTreasure(); }, 500);
-        } else {
-            wx.showToast({ title: '宝物不存在', icon: 'none' });
-        }
+        auth.ensureLogin().then(function (session) {
+            if (!session) {
+                that.setData({ hintSending: false });
+                return wx.showToast({ title: '微信登录后才能追加提示', icon: 'none' });
+            }
+            return db.addHint(that.data.id, hint).then(function (result) {
+                that.setData({ hintSending: false });
+                if (result.ok) {
+                    wx.showToast({ title: '提示已追加，宝物继续埋着', icon: 'none' });
+                    that.setData({ hintInput: '' });
+                    that.loadTreasure();
+                } else if (result.reason === 'gone') {
+                    wx.showToast({ title: '宝物刚被别人带走', icon: 'none' });
+                    that.stopTimer();
+                    that.loadTreasure();
+                } else if (result.reason === 'missing') {
+                    wx.showToast({ title: '宝物不存在', icon: 'none' });
+                } else {
+                    wx.showToast({ title: result.msg || '提交失败，请重试', icon: 'none' });
+                }
+            });
+        });
     }
 });

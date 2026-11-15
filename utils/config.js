@@ -1,8 +1,7 @@
-// 全局配置：距离阈值（米），v1 不做服务端校验
+// 全局配置：距离阈值（米）
+// 云端版说明：核销判定仍在客户端，但「带走/加提示」由服务端原子 RPC 落库裁决
 module.exports = {
   DISCOVER_RADIUS: 300, // 发现半径：进入该范围才出现在地图/列表，防止远程扫点
   BLUR_RADIUS: 80,      // 模糊半径：只画范围圈，不给精确点
-  CLAIM_RADIUS: 30,     // 核销半径：走进该范围才解锁「带走 / 追加提示」
-  STORAGE_KEY: 'cth_treasures_v1',
-  UID_KEY: 'cth_uid_v1'
+  CLAIM_RADIUS: 30      // 核销半径：走进该范围才解锁「带走 / 追加提示」
 };

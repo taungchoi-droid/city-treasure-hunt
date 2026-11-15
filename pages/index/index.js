@@ -15,7 +15,10 @@ Page({
     },
 
     onShow() {
+        var that = this;
         var db = require('../../utils/db');
-        this.setData({ buriedCount: db.listBuried().length });
+        db.listBuried().then(function (list) {
+            that.setData({ buriedCount: list.length });
+        });
     }
 });

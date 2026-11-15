@@ -1,7 +1,9 @@
 // 藏宝页：取当前位置 → 命名 + 谜题 → 拍现场照 → 提交（status=buried 落库）
 // 坐标只用 wx.getLocation({ type: 'gcj02' }) 的返回值，不做二次转换
+// 现场照为防刷硬性要求：不上传照片不允许提交，照片上传云端 shared 存储
 var db = require('../../utils/db');
 var sec = require('../../utils/sec');
+var auth = require('../../utils/auth');
 
 var app = getApp();
 
@@ -133,7 +135,7 @@ Page({
         }
     },
 
-    /* ---------- 提交 ---------- */
+    /* ---------- 提交（云端版：登录 → 照片上云 → 落库） ---------- */
     submit: function () {
         var that = this;
         var name = (this.data.name || '').trim();
@@ -170,22 +172,35 @@ Page({
         this.setData({ submitting: true });
 
         var pos = app.globalData.lastLocation;
-        var record = db.insert({
-            name: name,
-            riddle: riddle,
-            lng: pos[0],
-            lat: pos[1],
-            photoPath: photoPath
+        auth.ensureLogin().then(function (session) {
+            if (!session) {
+                that.setData({ submitting: false });
+                return wx.showToast({ title: '微信登录后才能藏宝', icon: 'none' });
+            }
+            // 现场照上传到云存储（shared，其他玩家可看）
+            return db.uploadPhoto(photoPath, session).then(function (up) {
+                if (up.err) {
+                    that.setData({ submitting: false });
+                    return wx.showToast({ title: up.err, icon: 'none' });
+                }
+                return db.insert({
+                    name: name,
+                    riddle: riddle,
+                    lng: pos[0],
+                    lat: pos[1],
+                    photoPath: up.path
+                }).then(function (record) {
+                    that.setData({ submitting: false });
+                    if (record && record.id) {
+                        wx.showToast({ title: '埋好了！等别人来挖', icon: 'success' });
+                        setTimeout(function () {
+                            wx.reLaunch({ url: '/pages/map/map' });
+                        }, 900);
+                    } else {
+                        wx.showToast({ title: (record && record.err) || '提交失败，请重试', icon: 'none' });
+                    }
+                });
+            });
         });
-
-        this.setData({ submitting: false });
-        if (record && record.id) {
-            wx.showToast({ title: '埋好了！等别人来挖', icon: 'success' });
-            setTimeout(function () {
-                wx.reLaunch({ url: '/pages/map/map' });
-            }, 900);
-        } else {
-            wx.showToast({ title: '提交失败，请重试', icon: 'none' });
-        }
     }
 });
