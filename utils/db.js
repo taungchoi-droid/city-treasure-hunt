@@ -151,26 +151,59 @@ function nearby(player, radius) {
 /* ---------- 照片上云（shared 目录，跨用户可见） ---------- */
 
 // 上传现场照：localPath 为本机文件路径，返回存储对象路径或 { err }
+// 实现说明：SDK 小程序适配器当前不支持二进制请求 body（ArrayBuffer 抛「待补」），
+// 因此采用 SDK 签发签名上传 URL（token 在 URL 内授权，无需 SDK 注入凭证），
+// 二进制内容走微信原生 wx.uploadFile 多部分上传通道。
+// err 里带上真实错误码/信息，方便真机排查（域名白名单 / 权限 / 网络）
 function uploadPhoto(localPath, session) {
     return new Promise(function (resolve) {
-        var fs = wx.getFileSystemManager();
-        fs.readFile({
-            filePath: localPath,
-            success: function (fres) {
-                var uid = session && session.user && session.user.id ? session.user.id : 'unknown';
-                var path = cloud.storage.sharedPath(uid, 'treasures/' + Date.now() + '.jpg');
-                cloud.storage.upload(path, fres.data, { contentType: 'image/jpeg' })
-                    .then(function (r) {
-                        if (r.error) {
-                            console.error('[WorkBuddy Cloud] photo upload failed', r.error.message);
-                            resolve({ err: '照片上传失败' });
-                            return;
-                        }
+        var uid = session && session.user && session.user.id ? session.user.id : '';
+        if (!uid) {
+            resolve({ err: '未登录，无法上传照片' });
+            return;
+        }
+        var path = cloud.storage.sharedPath(uid, 'treasures/' + Date.now() + '.jpg');
+        cloud.storage.createSignedUploadUrl(path).then(function (signed) {
+            if (signed.error || !signed.data || !signed.data.signedUrl) {
+                console.error('[WorkBuddy Cloud] sign upload url failed', JSON.stringify({
+                    stage: 'storage-sign',
+                    code: signed.error && signed.error.code || '',
+                    message: signed.error && signed.error.message || ''
+                }));
+                resolve({ err: '照片上传失败 ' + ((signed.error && signed.error.message) || '').slice(0, 80) });
+                return;
+            }
+            wx.uploadFile({
+                url: signed.data.signedUrl,
+                filePath: localPath,
+                name: 'file',
+                formData: { cacheControl: '3600' },
+                success: function (res) {
+                    if (res.statusCode >= 200 && res.statusCode < 300) {
                         resolve({ path: path });
-                    })
-                    .catch(function () { resolve({ err: '照片上传失败' }); });
-            },
-            fail: function () { resolve({ err: '读取照片失败' }); }
+                    } else {
+                        console.error('[WorkBuddy Cloud] photo upload failed', JSON.stringify({
+                            stage: 'wx.uploadFile',
+                            status: res.statusCode,
+                            body: String(res.data || '').slice(0, 200)
+                        }));
+                        resolve({ err: '照片上传失败 HTTP ' + res.statusCode });
+                    }
+                },
+                fail: function (err) {
+                    console.error('[WorkBuddy Cloud] photo upload failed', JSON.stringify({
+                        stage: 'wx.uploadFile',
+                        message: err && err.errMsg ? err.errMsg : 'uploadFile failed'
+                    }));
+                    resolve({ err: '照片上传失败 ' + (err && err.errMsg ? err.errMsg : '') });
+                }
+            });
+        }).catch(function (e) {
+            console.error('[WorkBuddy Cloud] photo sign threw', JSON.stringify({
+                stage: 'storage-sign',
+                message: e && e.message ? e.message : String(e)
+            }));
+            resolve({ err: '照片上传失败 ' + ((e && e.message) ? e.message : String(e)).slice(0, 80) });
         });
     });
 }
