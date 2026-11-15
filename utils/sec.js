@@ -100,6 +100,7 @@ function parseVerdict(raw) {
   var start = s.indexOf('{');
   var end = s.lastIndexOf('}');
   if (start === -1 || end <= start) {
+    console.warn('[Sec] 审核降级：模型输出无JSON', s.slice(0, 60));
     return degraded;
   }
   try {
@@ -109,6 +110,7 @@ function parseVerdict(raw) {
     }
     return { ok: true };
   } catch (e) {
+    console.warn('[Sec] 审核降级：JSON解析失败', s.slice(0, 60));
     return degraded;
   }
 }
@@ -116,6 +118,7 @@ function parseVerdict(raw) {
 function moderate(text) {
   return pickModel().then(function (modelId) {
     if (!modelId) {
+      console.warn('[Sec] 审核降级：无可用模型，仅本地词表兜底');
       return { ok: true, degraded: true }; // 无可用模型，本地词表兜底
     }
     return new Promise(function (resolve) {
@@ -128,9 +131,11 @@ function moderate(text) {
       }
       // 超时保护：不让审核卡住提交
       setTimeout(function () {
+        console.warn('[Sec] 审核降级：模型响应超时（' + MODERATION_TIMEOUT_MS + 'ms），放行');
         finish({ ok: true, degraded: true });
       }, MODERATION_TIMEOUT_MS);
       try {
+        var t0 = Date.now();
         var stream = cloud.llm.chat.completions.create({
           model: modelId,
           stream: true,
@@ -141,6 +146,7 @@ function moderate(text) {
           response_format: { type: 'json_object' }
         });
         collectStream(stream).then(function (raw) {
+          console.log('[Sec] 审核完成（' + (Date.now() - t0) + 'ms, model=' + modelId + '）', String(raw).slice(0, 80));
           finish(parseVerdict(raw));
         }).catch(function (e) {
           console.error('[Sec] moderation stream failed', e && e.message ? e.message : String(e));

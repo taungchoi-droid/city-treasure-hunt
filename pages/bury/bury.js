@@ -168,7 +168,9 @@ Page({
             if (!session) {
                 throw { stop: true, msg: '微信登录后才能藏宝' };
             }
+            wx.showLoading({ title: '内容审核中…', mask: true });
             return Promise.all([sec.checkText(name), sec.checkText(riddle)]).then(function (checks) {
+                wx.hideLoading();
                 if (!checks[0].ok) {
                     throw { stop: true, msg: checks[0].msg };
                 }
@@ -199,6 +201,7 @@ Page({
                 });
             });
         }).catch(function (e) {
+            wx.hideLoading();
             that.setData({ submitting: false });
             if (e && e.stop) {
                 wx.showToast({ title: e.msg, icon: 'none' });

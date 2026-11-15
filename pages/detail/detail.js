@@ -231,7 +231,9 @@ Page({
             if (!session) {
                 throw { stop: true, msg: '微信登录后才能追加提示' };
             }
+            wx.showLoading({ title: '内容审核中…', mask: true });
             return sec.checkText(hint).then(function (check) {
+                wx.hideLoading();
                 if (!check.ok) {
                     throw { stop: true, msg: check.msg };
                 }
@@ -253,6 +255,7 @@ Page({
                 });
             });
         }).catch(function (e) {
+            wx.hideLoading();
             that.setData({ hintSending: false });
             if (e && e.stop) {
                 wx.showToast({ title: e.msg, icon: 'none' });
