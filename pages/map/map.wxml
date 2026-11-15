@@ -1,40 +1,56 @@
-<map
-    id="treasureMap"
-    class="the-map"
-    latitude="{{latitude}}"
-    longitude="{{longitude}}"
-    scale="{{scale}}"
-    markers="{{markers}}"
-    circles="{{circles}}"
-    show-location="{{!manualMode}}"
-    bindmarkertap="onMarkerTap">
+<view class="page">
+    <view class="map-wrap">
+        <map
+            id="treasureMap"
+            class="the-map"
+            latitude="{{latitude}}"
+            longitude="{{longitude}}"
+            scale="{{scale}}"
+            markers="{{markers}}"
+            circles="{{circles}}"
+            show-location="{{!manualMode}}"
+            bindmarkertap="onMarkerTap">
 
-    <cover-view class="map-top">
-        <cover-view class="chip chip-pos" wx:if="{{viewState === 'loading'}}">正在获取你的位置…</cover-view>
-        <cover-view class="chip" wx:elif="{{manualMode}}">{{posLabel}}</cover-view>
-        <cover-view class="chip" wx:else>300 米内发现 {{nearbyCount}} 个宝物</cover-view>
-    </cover-view>
+            <cover-view class="map-top">
+                <cover-view class="chip chip-pos" wx:if="{{viewState === 'loading'}}">正在获取你的位置…</cover-view>
+                <cover-view class="chip" wx:elif="{{manualMode}}">{{posLabel}}</cover-view>
+                <cover-view class="chip" wx:else>{{radiusLabels[radiusIndex]}}内发现 {{nearbyCount}} 个宝物</cover-view>
+            </cover-view>
 
-    <cover-view class="map-actions">
-        <cover-view class="action-btn" bindtap="locate">刷新位置</cover-view>
-        <cover-view wx:if="{{manualMode}}" class="action-btn action-alt" bindtap="useMapCenter">以地图中心定位</cover-view>
-        <cover-view wx:if="{{manualMode}}" class="action-btn action-alt" bindtap="openSetting">打开设置</cover-view>
-        <cover-view class="action-btn action-gold" bindtap="goBury">藏一个</cover-view>
-    </cover-view>
+            <cover-view class="map-actions">
+                <cover-view class="action-btn" bindtap="locate">刷新位置</cover-view>
+                <cover-view wx:if="{{manualMode}}" class="action-btn action-alt" bindtap="useMapCenter">以地图中心定位</cover-view>
+                <cover-view wx:if="{{manualMode}}" class="action-btn action-alt" bindtap="openSetting">打开设置</cover-view>
+                <cover-view class="action-btn action-gold" bindtap="goBury">藏一个</cover-view>
+            </cover-view>
+        </map>
+    </view>
 
-    <cover-view class="nearby-panel">
-        <cover-view class="panel-title">附近宝物（{{nearbyCount}}）</cover-view>
-        <cover-view wx:if="{{nearbyCount === 0}}" class="panel-empty">
-            300 米内暂无宝物。走动一下，或自己埋一个。
-        </cover-view>
-        <cover-view
-            wx:for="{{nearbyList}}"
-            wx:key="id"
-            class="treasure-row"
-            data-id="{{item.id}}"
-            bindtap="onRowTap">
-            <cover-view class="t-name">{{item.name}}</cover-view>
-            <cover-view class="t-dist">{{item.distText}}</cover-view>
-        </cover-view>
-    </cover-view>
-</map>
+    <view class="nearby-panel">
+        <view class="panel-head">
+            <view class="panel-title">附近宝物（{{nearbyCount}}）</view>
+            <picker
+                class="radius-picker"
+                mode="selector"
+                range="{{radiusLabels}}"
+                value="{{radiusIndex}}"
+                bindchange="onRadiusChange">
+                <view class="radius-btn">范围 {{radiusLabels[radiusIndex]}} ▾</view>
+            </picker>
+        </view>
+        <view wx:if="{{nearbyCount === 0}}" class="panel-empty">
+            范围内暂无宝物。走动一下、扩大查看范围，或自己埋一个。
+        </view>
+        <scroll-view wx:else scroll-y class="nearby-scroll">
+            <view
+                wx:for="{{nearbyList}}"
+                wx:key="id"
+                class="treasure-row"
+                data-id="{{item.id}}"
+                bindtap="onRowTap">
+                <view class="t-name">{{item.name}}</view>
+                <view class="t-dist">{{item.distText}}</view>
+            </view>
+        </scroll-view>
+    </view>
+</view>

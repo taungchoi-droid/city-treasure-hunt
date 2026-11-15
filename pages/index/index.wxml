@@ -12,7 +12,7 @@
         </view>
         <view class="entry-main entry-main-seek" bindtap="goSeek">
             <text class="entry-title">我要寻宝</text>
-            <text class="entry-desc">看看 300 米内埋着什么，读谜题、走到点、把它带走</text>
+            <text class="entry-desc">看看附近埋着什么，读谜题、走到点、把它带走</text>
         </view>
     </view>
 

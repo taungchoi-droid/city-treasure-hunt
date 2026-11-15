@@ -17,13 +17,21 @@ Page({
         nearbyList: [],
         nearbyCount: 0,
         manualMode: false,
-        posLabel: ''
+        posLabel: '',
+        // 查看范围（滚轮）
+        radiusLabels: config.RADIUS_OPTIONS.map(function (o) { return o.label; }),
+        radiusIndex: 0
     },
 
     onLoad: function () {
         this._markerIndex = []; // 数字 id -> treasure.id
         this._lastRefreshAt = 0;
         this._fetching = false;
+        // 恢复上次的查看范围选择
+        var saved = wx.getStorageSync('discover_radius_index');
+        if (typeof saved === 'number' && saved >= 0 && saved < config.RADIUS_OPTIONS.length) {
+            this.setData({ radiusIndex: saved });
+        }
         this.locate();
     },
 
@@ -109,6 +117,21 @@ Page({
         wx.openSetting({});
     },
 
+    /* ---------- 查看范围（滚轮） ---------- */
+    onRadiusChange: function (e) {
+        var idx = Number(e.detail.value);
+        if (isNaN(idx) || idx < 0 || idx >= config.RADIUS_OPTIONS.length) return;
+        this.setData({ radiusIndex: idx, scale: config.RADIUS_OPTIONS[idx].scale });
+        wx.setStorageSync('discover_radius_index', idx);
+        this.refreshNearby();
+    },
+
+    // 当前生效的查询半径（不限时用极大值）
+    _radius: function () {
+        var m = config.RADIUS_OPTIONS[this.data.radiusIndex].meters;
+        return m === null ? 1e9 : m;
+    },
+
     /* ---------- 附近宝物 ---------- */
     refreshNearby: function () {
         var player = app.globalData.lastLocation;
@@ -116,12 +139,16 @@ Page({
             this.setData({ markers: [], circles: [], nearbyList: [], nearbyCount: 0 });
             return;
         }
-        if (this._fetching) return; // 云端请求进行中，跳过本轮
+        if (this._fetching) { this._pendingRefresh = true; return; }
         this._fetching = true;
         var that = this;
-        db.nearby(player, config.DISCOVER_RADIUS).then(function (near) {
+        db.nearby(player, this._radius()).then(function (near) {
             that._fetching = false;
             that.renderNearby(near);
+            if (that._pendingRefresh) {
+                that._pendingRefresh = false;
+                that.refreshNearby();
+            }
         });
     },
 

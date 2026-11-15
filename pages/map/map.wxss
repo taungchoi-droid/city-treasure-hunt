@@ -1,6 +1,19 @@
-.the-map {
-    width: 100vw;
+.page {
+    display: flex;
+    flex-direction: column;
     height: 100vh;
+}
+
+/* 地图区：占剩余空间，浮层只留状态条 + 操作按钮 */
+.map-wrap {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+}
+
+.the-map {
+    width: 100%;
+    height: 100%;
 }
 
 .map-top {
@@ -52,23 +65,34 @@
     font-weight: 700;
 }
 
+/* 附近宝物面板：地图下方常规区域（非 cover-view），可放 picker 滚轮 */
 .nearby-panel {
-    position: absolute;
-    left: 24rpx;
-    right: 24rpx;
-    bottom: 40rpx;
-    max-height: 40vh;
-    padding: 24rpx 24rpx 20rpx;
-    border-radius: 22rpx;
-    background: rgba(16, 19, 26, 0.92);
-    overflow-y: auto;
+    flex-shrink: 0;
+    padding: 22rpx 24rpx calc(22rpx + env(safe-area-inset-bottom));
+    background: rgba(16, 19, 26, 0.96);
+}
+
+.panel-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12rpx;
 }
 
 .panel-title {
     color: rgba(232, 176, 75, 0.65);
     font-size: 22rpx;
     letter-spacing: 4rpx;
-    margin-bottom: 12rpx;
+}
+
+.radius-btn {
+    padding: 8rpx 20rpx;
+    border-radius: 999rpx;
+    background: rgba(232, 176, 75, 0.14);
+    border: 1rpx solid rgba(232, 176, 75, 0.4);
+    color: #e8b04b;
+    font-size: 24rpx;
+    line-height: 1.4;
 }
 
 .panel-empty {
@@ -76,6 +100,10 @@
     font-size: 26rpx;
     line-height: 1.6;
     padding: 8rpx 0 12rpx;
+}
+
+.nearby-scroll {
+    max-height: 30vh;
 }
 
 .treasure-row {
