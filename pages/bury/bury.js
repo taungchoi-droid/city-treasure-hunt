@@ -158,49 +158,54 @@ Page({
             return wx.showToast({ title: '拍一张现场照确认藏宝', icon: 'none' });
         }
 
-        // UGC 内容检查（本地占位，正式版需接 msgSecCheck）
-        var nameCheck = sec.checkText(name);
-        if (!nameCheck.ok) {
-            return wx.showToast({ title: nameCheck.msg, icon: 'none' });
-        }
-        var riddleCheck = sec.checkText(riddle);
-        if (!riddleCheck.ok) {
-            return wx.showToast({ title: riddleCheck.msg, icon: 'none' });
-        }
-
         if (this.data.submitting) return;
         this.setData({ submitting: true });
 
         var pos = app.globalData.lastLocation;
+
+        // 流程：登录 → UGC 内容审核（本地词筛 + 大模型语义审核）→ 照片上云 → 落库
         auth.ensureLogin().then(function (session) {
             if (!session) {
-                that.setData({ submitting: false });
-                return wx.showToast({ title: '微信登录后才能藏宝', icon: 'none' });
+                throw { stop: true, msg: '微信登录后才能藏宝' };
             }
-            // 现场照上传到云存储（shared，其他玩家可看）
-            return db.uploadPhoto(photoPath, session).then(function (up) {
-                if (up.err) {
-                    that.setData({ submitting: false });
-                    return wx.showToast({ title: up.err, icon: 'none' });
+            return Promise.all([sec.checkText(name), sec.checkText(riddle)]).then(function (checks) {
+                if (!checks[0].ok) {
+                    throw { stop: true, msg: checks[0].msg };
                 }
-                return db.insert({
-                    name: name,
-                    riddle: riddle,
-                    lng: pos[0],
-                    lat: pos[1],
-                    photoPath: up.path
-                }).then(function (record) {
-                    that.setData({ submitting: false });
-                    if (record && record.id) {
-                        wx.showToast({ title: '埋好了！等别人来挖', icon: 'success' });
-                        setTimeout(function () {
-                            wx.reLaunch({ url: '/pages/map/map' });
-                        }, 900);
-                    } else {
-                        wx.showToast({ title: (record && record.err) || '提交失败，请重试', icon: 'none' });
+                if (!checks[1].ok) {
+                    throw { stop: true, msg: checks[1].msg };
+                }
+                // 现场照上传到云存储（shared，其他玩家可看）
+                return db.uploadPhoto(photoPath, session).then(function (up) {
+                    if (up.err) {
+                        throw { stop: true, msg: up.err };
                     }
+                    return db.insert({
+                        name: name,
+                        riddle: riddle,
+                        lng: pos[0],
+                        lat: pos[1],
+                        photoPath: up.path
+                    }).then(function (record) {
+                        if (record && record.id) {
+                            wx.showToast({ title: '埋好了！等别人来挖', icon: 'success' });
+                            setTimeout(function () {
+                                wx.reLaunch({ url: '/pages/map/map' });
+                            }, 900);
+                        } else {
+                            throw { stop: true, msg: (record && record.err) || '提交失败，请重试' };
+                        }
+                    });
                 });
             });
+        }).catch(function (e) {
+            that.setData({ submitting: false });
+            if (e && e.stop) {
+                wx.showToast({ title: e.msg, icon: 'none' });
+            } else {
+                console.error('[Bury] submit failed', e && e.message ? e.message : String(e));
+                wx.showToast({ title: '提交失败，请重试', icon: 'none' });
+            }
         });
     }
 });

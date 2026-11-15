@@ -223,34 +223,43 @@ Page({
         if (!this.data.inRange) {
             return wx.showToast({ title: '走近到 30 米内才能追加提示', icon: 'none' });
         }
-        var check = sec.checkText(hint);
-        if (!check.ok) {
-            return wx.showToast({ title: check.msg, icon: 'none' });
-        }
         if (this.data.hintSending) return;
         this.setData({ hintSending: true });
 
+        // 流程：登录 → UGC 内容审核（本地词筛 + 大模型语义审核）→ 服务端原子追加
         auth.ensureLogin().then(function (session) {
             if (!session) {
-                that.setData({ hintSending: false });
-                return wx.showToast({ title: '微信登录后才能追加提示', icon: 'none' });
+                throw { stop: true, msg: '微信登录后才能追加提示' };
             }
-            return db.addHint(that.data.id, hint).then(function (result) {
-                that.setData({ hintSending: false });
-                if (result.ok) {
-                    wx.showToast({ title: '提示已追加，宝物继续埋着', icon: 'none' });
-                    that.setData({ hintInput: '' });
-                    that.loadTreasure();
-                } else if (result.reason === 'gone') {
-                    wx.showToast({ title: '宝物刚被别人带走', icon: 'none' });
-                    that.stopTimer();
-                    that.loadTreasure();
-                } else if (result.reason === 'missing') {
-                    wx.showToast({ title: '宝物不存在', icon: 'none' });
-                } else {
-                    wx.showToast({ title: result.msg || '提交失败，请重试', icon: 'none' });
+            return sec.checkText(hint).then(function (check) {
+                if (!check.ok) {
+                    throw { stop: true, msg: check.msg };
                 }
+                return db.addHint(that.data.id, hint).then(function (result) {
+                    that.setData({ hintSending: false });
+                    if (result.ok) {
+                        wx.showToast({ title: '提示已追加，宝物继续埋着', icon: 'none' });
+                        that.setData({ hintInput: '' });
+                        that.loadTreasure();
+                    } else if (result.reason === 'gone') {
+                        wx.showToast({ title: '宝物刚被别人带走', icon: 'none' });
+                        that.stopTimer();
+                        that.loadTreasure();
+                    } else if (result.reason === 'missing') {
+                        wx.showToast({ title: '宝物不存在', icon: 'none' });
+                    } else {
+                        throw { stop: true, msg: result.msg || '提交失败，请重试' };
+                    }
+                });
             });
+        }).catch(function (e) {
+            that.setData({ hintSending: false });
+            if (e && e.stop) {
+                wx.showToast({ title: e.msg, icon: 'none' });
+            } else {
+                console.error('[Detail] addHint failed', e && e.message ? e.message : String(e));
+                wx.showToast({ title: '提交失败，请重试', icon: 'none' });
+            }
         });
     }
 });
