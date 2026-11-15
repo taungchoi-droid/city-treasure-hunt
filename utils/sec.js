@@ -3,7 +3,8 @@
 // 2) 平台免密钥大模型语义审核——识别变体、隐晦表达，走 WorkBuddy 云 LLM（需已登录会话）
 // 失败策略（fail-open）：大模型不可用/超时/解析失败时放行，由本地词表兜底；
 // 如需强拦截，把 MODERATION_REQUIRED 改为 true。
-var cloud = require('./cloud');
+var cloudMod = require('./cloud');
+var cloud = cloudMod.cloud; // 注意：模块导出的是 { cloud: 客户端, publicConfig } 包装，客户端本体在 .cloud 属性上
 
 var MODERATION_TIMEOUT_MS = 10000;
 var MODERATION_REQUIRED = false;
@@ -43,7 +44,9 @@ function pickModel() {
   if (pickModel._loading) {
     return pickModel._loading;
   }
-  pickModel._loading = cloud.llm.models.list().then(function (models) {
+  pickModel._loading = (cloudMod.cloud && cloudMod.cloud.llm && cloudMod.cloud.llm.models
+    ? cloudMod.cloud.llm.models.list()
+    : Promise.reject(new Error('llm namespace unavailable'))).then(function (models) {
     var id = null;
     if (models && models.length) {
       for (var i = 0; i < models.length; i++) {
