@@ -23,6 +23,54 @@
     color: #e8b04b;
 }
 
+/* 头部：标题 + 收藏按钮 */
+.head-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+}
+
+.head-main {
+    flex: 1;
+    min-width: 0;
+}
+
+.fav-btn {
+    flex-shrink: 0;
+    margin-left: 20rpx;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-width: 108rpx;
+    padding: 12rpx 14rpx;
+    border-radius: 14rpx;
+    border: 2rpx solid rgba(232, 176, 75, 0.35);
+    background: rgba(232, 176, 75, 0.06);
+}
+
+.fav-icon {
+    font-size: 34rpx;
+    line-height: 1;
+    color: #e8b04b;
+}
+
+.fav-text {
+    margin-top: 6rpx;
+    font-size: 20rpx;
+    color: rgba(232, 176, 75, 0.8);
+}
+
+.fav-on {
+    border-color: rgba(240, 196, 106, 0.8);
+    background: rgba(232, 176, 75, 0.22);
+}
+
+.fav-on .fav-icon,
+.fav-on .fav-text {
+    color: #f0c46a;
+}
+
 .t-meta {
     display: block;
     margin-top: 10rpx;

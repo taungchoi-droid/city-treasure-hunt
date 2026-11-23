@@ -1,0 +1,246 @@
+.page {
+    box-sizing: border-box;
+    min-height: 100vh;
+    padding: 32rpx 32rpx 64rpx;
+}
+
+.user-card,
+.stats-card,
+.list-card {
+    box-sizing: border-box;
+    border-radius: 24rpx;
+    border: 2rpx solid rgba(232, 176, 75, 0.22);
+    background: rgba(26, 30, 41, 0.85);
+    padding: 32rpx;
+    margin-bottom: 24rpx;
+}
+
+/* ---------- 用户信息 ---------- */
+.user-row {
+    display: flex;
+    align-items: center;
+}
+
+.avatar-img,
+.avatar-text {
+    width: 112rpx;
+    height: 112rpx;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.avatar-text {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(180deg, #f0c46a, #d99a34);
+    color: #1a1408;
+    font-size: 48rpx;
+    font-weight: 800;
+}
+
+.user-meta {
+    margin-left: 28rpx;
+    display: flex;
+    flex-direction: column;
+}
+
+.user-name {
+    font-size: 38rpx;
+    font-weight: 700;
+    color: #f4ead6;
+}
+
+.user-id {
+    margin-top: 10rpx;
+    font-size: 22rpx;
+    letter-spacing: 2rpx;
+    color: rgba(244, 234, 214, 0.4);
+    font-variant-numeric: tabular-nums;
+}
+
+.login-box {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 16rpx 0 8rpx;
+}
+
+.login-title {
+    font-size: 34rpx;
+    font-weight: 700;
+    color: #e8b04b;
+}
+
+.login-desc {
+    margin-top: 14rpx;
+    font-size: 24rpx;
+    line-height: 1.7;
+    color: rgba(244, 234, 214, 0.55);
+    text-align: center;
+}
+
+.login-btn {
+    margin-top: 28rpx;
+    width: 70%;
+    font-size: 30rpx;
+}
+
+/* ---------- 统计 ---------- */
+.stats-card {
+    display: flex;
+    align-items: center;
+    padding: 28rpx 16rpx;
+}
+
+.stat-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.stat-num {
+    font-size: 44rpx;
+    font-weight: 800;
+    color: #f4ead6;
+    font-variant-numeric: tabular-nums;
+}
+
+.stat-label {
+    margin-top: 8rpx;
+    font-size: 22rpx;
+    color: rgba(244, 234, 214, 0.45);
+}
+
+.stat-divider {
+    width: 1rpx;
+    height: 56rpx;
+    background: rgba(232, 176, 75, 0.18);
+}
+
+/* ---------- Tab ---------- */
+.tab-bar {
+    display: flex;
+    margin-bottom: 20rpx;
+    border-radius: 18rpx;
+    background: rgba(255, 255, 255, 0.05);
+    padding: 6rpx;
+}
+
+.tab-item {
+    flex: 1;
+    text-align: center;
+    padding: 18rpx 0;
+    font-size: 26rpx;
+    color: rgba(244, 234, 214, 0.55);
+    border-radius: 14rpx;
+}
+
+.tab-active {
+    background: rgba(232, 176, 75, 0.18);
+    color: #e8b04b;
+    font-weight: 700;
+}
+
+/* ---------- 列表 ---------- */
+.list-card {
+    padding: 8rpx 28rpx;
+}
+
+.list-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 26rpx 0;
+    border-bottom: 1rpx solid rgba(232, 176, 75, 0.14);
+}
+
+.list-row:last-child {
+    border-bottom: none;
+}
+
+.row-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.row-title-line {
+    display: flex;
+    align-items: center;
+}
+
+.row-name {
+    font-size: 30rpx;
+    font-weight: 600;
+    color: #f4ead6;
+    max-width: 380rpx;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.name-gone {
+    color: rgba(244, 234, 214, 0.4);
+}
+
+.row-badge {
+    margin-left: 14rpx;
+    padding: 4rpx 12rpx;
+    border-radius: 8rpx;
+    font-size: 20rpx;
+    color: #4ecb8d;
+    background: rgba(78, 203, 141, 0.12);
+}
+
+.badge-gone {
+    color: rgba(244, 234, 214, 0.45);
+    background: rgba(244, 234, 214, 0.08);
+}
+
+.row-sub {
+    margin-top: 8rpx;
+    font-size: 22rpx;
+    color: rgba(244, 234, 214, 0.4);
+}
+
+.row-action {
+    flex-shrink: 0;
+    margin-left: 20rpx;
+    padding: 10rpx 18rpx;
+    font-size: 22rpx;
+    color: #e8b04b;
+    border: 1rpx solid rgba(232, 176, 75, 0.35);
+    border-radius: 10rpx;
+}
+
+/* ---------- 空态 ---------- */
+.empty-box {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 56rpx 16rpx;
+}
+
+.empty-text {
+    font-size: 26rpx;
+    line-height: 1.7;
+    color: rgba(244, 234, 214, 0.45);
+    text-align: center;
+}
+
+.empty-btn {
+    margin-top: 26rpx;
+}
+
+.foot-tip {
+    padding: 8rpx 12rpx;
+}
+
+.foot-text {
+    font-size: 22rpx;
+    line-height: 1.6;
+    color: rgba(244, 234, 214, 0.3);
+}

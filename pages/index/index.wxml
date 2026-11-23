@@ -1,6 +1,9 @@
 <view class="page">
     <view class="hero">
-        <text class="eyebrow">CITY TREASURE HUNT</text>
+        <view class="hero-top">
+            <text class="eyebrow">CITY TREASURE HUNT</text>
+            <view class="me-entry" bindtap="goProfile">我的</view>
+        </view>
         <text class="title">{{appName}}</text>
         <text class="subtitle">{{tagline}}</text>
     </view>

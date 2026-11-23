@@ -22,7 +22,9 @@ Page({
         positionReady: false,
         hintInput: '',
         hintSending: false,
-        taking: false
+        taking: false,
+        favorited: false,     // 是否已收藏（未登录时仅展示，点击会先登录）
+        favBusy: false
     },
 
     onLoad: function (options) {
@@ -35,6 +37,7 @@ Page({
     onShow: function () {
         // 每次展示都重新拉一次状态：可能已被别人带走
         this.loadTreasure();
+        this.loadFavoriteState();
         this.refreshDistance();
         this.startTimer();
     },
@@ -106,6 +109,38 @@ Page({
         if (this.data.photoUrl) {
             wx.previewImage({ urls: [this.data.photoUrl] });
         }
+    },
+
+    /* ---------- 收藏（本人私有数据；未登录点击时静默登录） ---------- */
+    loadFavoriteState: function () {
+        var that = this;
+        if (!this.data.id) return;
+        db.isFavorite(this.data.id).then(function (fav) {
+            that.setData({ favorited: fav });
+        });
+    },
+
+    toggleFavorite: function () {
+        var that = this;
+        if (this.data.favBusy) return;
+        this.setData({ favBusy: true });
+        auth.ensureLogin().then(function (session) {
+            if (!session) {
+                that.setData({ favBusy: false });
+                return wx.showToast({ title: '微信登录后才能收藏', icon: 'none' });
+            }
+            db.toggleFavorite(that.data.id).then(function (r) {
+                that.setData({ favBusy: false });
+                if (r.err) {
+                    return wx.showToast({ title: r.err, icon: 'none' });
+                }
+                that.setData({ favorited: r.favorited });
+                wx.showToast({
+                    title: r.favorited ? '已收藏，可在「我的」查看' : '已取消收藏',
+                    icon: 'none'
+                });
+            });
+        });
     },
 
     /* ---------- 距离与核销判定（用缓存，不请求服务端） ---------- */

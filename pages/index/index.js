@@ -14,6 +14,10 @@ Page({
         wx.navigateTo({ url: '/pages/bury/bury' });
     },
 
+    goProfile() {
+        wx.navigateTo({ url: '/pages/profile/profile' });
+    },
+
     onShow() {
         var that = this;
         var db = require('../../utils/db');

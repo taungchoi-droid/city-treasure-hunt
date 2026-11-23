@@ -1,7 +1,15 @@
 <view class="page" wx:if="{{treasure}}">
     <view class="head-card">
-        <text class="t-name">{{treasure.name}}</text>
-        <text class="t-meta">埋于 {{treasure.buriedAtText}}</text>
+        <view class="head-row">
+            <view class="head-main">
+                <text class="t-name">{{treasure.name}}</text>
+                <text class="t-meta">埋于 {{treasure.buriedAtText}}</text>
+            </view>
+            <view class="fav-btn {{favorited ? 'fav-on' : ''}}" bindtap="toggleFavorite">
+                <text class="fav-icon">{{favorited ? '★' : '☆'}}</text>
+                <text class="fav-text">{{favorited ? '已收藏' : '收藏'}}</text>
+            </view>
+        </view>
         <view class="riddle-box">
             <text class="riddle-label">谜题</text>
             <text class="riddle-text">{{treasure.riddle}}</text>

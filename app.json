@@ -3,7 +3,8 @@
     "pages/index/index",
     "pages/map/map",
     "pages/detail/detail",
-    "pages/bury/bury"
+    "pages/bury/bury",
+    "pages/profile/profile"
   ],
   "window": {
     "navigationBarTitleText": "城市寻宝",

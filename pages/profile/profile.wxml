@@ -1,0 +1,91 @@
+<view class="page" wx:if="{{ready}}">
+    <view class="user-card">
+        <block wx:if="{{loggedIn}}">
+            <view class="user-row">
+                <image wx:if="{{avatarUrl}}" class="avatar-img" src="{{avatarUrl}}" mode="aspectFill" />
+                <view wx:else class="avatar-text">{{initial}}</view>
+                <view class="user-meta">
+                    <text class="user-name">{{userName}}</text>
+                    <text class="user-id">ID {{shortId}}</text>
+                </view>
+            </view>
+        </block>
+        <block wx:else>
+            <view class="login-box">
+                <text class="login-title">还没登录</text>
+                <text class="login-desc">微信一键登录后，可以收藏宝物，并查看你带走和埋下的记录</text>
+                <button class="btn-primary login-btn" bindtap="onLoginTap">微信一键登录</button>
+            </view>
+        </block>
+    </view>
+
+    <block wx:if="{{loggedIn}}">
+        <view class="stats-card">
+            <view class="stat-item">
+                <text class="stat-num">{{stats.favorites}}</text>
+                <text class="stat-label">收藏</text>
+            </view>
+            <view class="stat-divider"></view>
+            <view class="stat-item">
+                <text class="stat-num">{{stats.taken}}</text>
+                <text class="stat-label">已带走</text>
+            </view>
+            <view class="stat-divider"></view>
+            <view class="stat-item">
+                <text class="stat-num">{{stats.buried}}</text>
+                <text class="stat-label">我埋下的</text>
+            </view>
+        </view>
+
+        <view class="tab-bar">
+            <view class="tab-item {{tab === 'fav' ? 'tab-active' : ''}}" data-tab="fav" bindtap="switchTab">
+                我的收藏（{{stats.favorites}}）
+            </view>
+            <view class="tab-item {{tab === 'taken' ? 'tab-active' : ''}}" data-tab="taken" bindtap="switchTab">
+                已带走（{{stats.taken}}）
+            </view>
+        </view>
+
+        <view class="list-card">
+            <block wx:if="{{tab === 'fav'}}">
+                <view wx:if="{{favorites.length === 0}}" class="empty-box">
+                    <text class="empty-text">还没有收藏。在宝物详情页点「收藏」，就会出现在这里。</text>
+                    <button class="btn-ghost empty-btn" size="mini" bindtap="goSeek">去寻宝</button>
+                </view>
+                <view
+                    wx:else
+                    class="list-row"
+                    wx:for="{{favorites}}"
+                    wx:key="id"
+                    data-id="{{item.id}}"
+                    data-status="{{item.status}}"
+                    bindtap="onFavTap">
+                    <view class="row-main">
+                        <view class="row-title-line">
+                            <text class="row-name {{item.gone ? 'name-gone' : ''}}">{{item.name}}</text>
+                            <text class="row-badge {{item.gone ? 'badge-gone' : ''}}">{{item.statusText}}</text>
+                        </view>
+                        <text class="row-sub" wx:if="{{item.subText}}">{{item.subText}}</text>
+                    </view>
+                    <view class="row-action" data-id="{{item.id}}" catchtap="onUnfavorite">取消收藏</view>
+                </view>
+            </block>
+            <block wx:else>
+                <view wx:if="{{taken.length === 0}}" class="empty-box">
+                    <text class="empty-text">还没有带走宝物。走到 30 米内点「我已带走」，这里会记下你的战利品。</text>
+                    <button class="btn-ghost empty-btn" size="mini" bindtap="goSeek">去寻宝</button>
+                </view>
+                <view wx:else class="list-row" wx:for="{{taken}}" wx:key="id">
+                    <view class="row-main">
+                        <text class="row-name">{{item.name}}</text>
+                        <text class="row-sub">{{item.subText}}</text>
+                    </view>
+                </view>
+            </block>
+        </view>
+
+        <view class="foot-tip">
+            <text class="foot-text">收藏仅你自己可见；已带走的宝物会从寻宝地图下架</text>
+        </view>
+    </block>
+</view>

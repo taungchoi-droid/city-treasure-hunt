@@ -148,6 +148,169 @@ function nearby(player, radius) {
     });
 }
 
+/* ---------- 收藏（仅本人可见，RLS 限定 owner_id） ---------- */
+
+// 收藏 / 取消收藏：返回 { ok, favorited } 或 { err }
+// 先查后写，天然幂等；唯一约束兜底并发重复收藏
+function toggleFavorite(treasureId) {
+    var numId = Number(treasureId);
+    if (!isFinite(numId)) return Promise.resolve({ err: '宝物参数异常' });
+    return auth.ensureLogin().then(function (session) {
+        if (!session) {
+            return { err: '未登录，无法收藏' };
+        }
+        return cloud.database
+            .from('favorites')
+            .select('id')
+            .eq('treasure_id', numId)
+            .limit(1)
+            .then(function (r) {
+                if (r.error) {
+                    console.error('[WorkBuddy Cloud] db favorite query failed', r.error.message);
+                    return { err: friendlyDbError(r.error) };
+                }
+                var rows = r.data || [];
+                if (rows.length) {
+                    return cloud.database
+                        .from('favorites')
+                        .delete()
+                        .eq('id', rows[0].id)
+                        .then(function (d) {
+                            if (d.error) {
+                                console.error('[WorkBuddy Cloud] db unfavorite failed', d.error.message);
+                                return { err: friendlyDbError(d.error) };
+                            }
+                            return { ok: true, favorited: false };
+                        });
+                }
+                return cloud.database
+                    .from('favorites')
+                    .insert({ treasure_id: numId })
+                    .then(function (i) {
+                        if (i.error) {
+                            // 23505 = 并发下已被另一请求收藏，按"已收藏"处理
+                            if (i.error.code === '23505') return { ok: true, favorited: true };
+                            console.error('[WorkBuddy Cloud] db favorite insert failed', i.error.message);
+                            return { err: friendlyDbError(i.error) };
+                        }
+                        return { ok: true, favorited: true };
+                    });
+            });
+    }).catch(function () {
+        return { err: '网络异常，操作失败' };
+    });
+}
+
+// 当前用户是否已收藏该宝物（未登录直接 false，不请求）
+function isFavorite(treasureId) {
+    var numId = Number(treasureId);
+    if (!isFinite(numId)) return Promise.resolve(false);
+    return auth.getSession().then(function (session) {
+        if (!session) return false;
+        return cloud.database
+            .from('favorites')
+            .select('id')
+            .eq('treasure_id', numId)
+            .limit(1)
+            .then(function (r) {
+                if (r.error || !r.data) return false;
+                return r.data.length > 0;
+            })
+            .catch(function () { return false; });
+    }).catch(function () { return false; });
+}
+
+// 我的收藏列表：favorites 只存 id，宝物详情二次查询并关联状态
+// taken 状态不隐藏——保留在列表里并标记「已被带走」（用户可自行取消收藏）
+function listFavorites() {
+    return auth.ensureLogin().then(function (session) {
+        if (!session) return { needLogin: true, list: [] };
+        return cloud.database
+            .from('favorites')
+            .select('id, treasure_id, created_at')
+            .order('created_at', { ascending: false })
+            .limit(100)
+            .then(function (r) {
+                if (r.error) {
+                    console.error('[WorkBuddy Cloud] db listFavorites failed', r.error.message);
+                    return { list: [], err: friendlyDbError(r.error) };
+                }
+                var favs = r.data || [];
+                if (!favs.length) return { list: [] };
+                var ids = favs.map(function (f) { return f.treasure_id; });
+                return cloud.database
+                    .from('treasures')
+                    .select('id, name, status, lng, lat')
+                    .in('id', ids)
+                    .then(function (t) {
+                        if (t.error) {
+                            console.error('[WorkBuddy Cloud] db favorites treasures failed', t.error.message);
+                            return { list: [], err: friendlyDbError(t.error) };
+                        }
+                        var byId = {};
+                        (t.data || []).forEach(function (x) { byId[x.id] = x; });
+                        var list = [];
+                        favs.forEach(function (f) {
+                            var row = byId[f.treasure_id];
+                            if (!row) return; // 宝物已被物理删除（ON DELETE CASCADE 理论上会带走收藏，兜底跳过）
+                            list.push({
+                                id: row.id,
+                                name: row.name,
+                                status: row.status,
+                                lng: row.lng,
+                                lat: row.lat,
+                                favoritedAt: f.created_at
+                            });
+                        });
+                        return { list: list };
+                    });
+            });
+    }).catch(function () {
+        return { list: [], err: '网络异常，加载失败' };
+    });
+}
+
+// 我带走过的宝物（taken_by = 我，按带走时间倒序）
+function listTaken() {
+    return auth.ensureLogin().then(function (session) {
+        if (!session) return { needLogin: true, list: [] };
+        var uid = session.user && session.user.id ? session.user.id : '';
+        if (!uid) return { list: [] };
+        return cloud.database
+            .from('treasures')
+            .select('id, name, riddle, hints, status, lng, lat, photo_path, owner_id, taken_by, created_at, updated_at')
+            .eq('taken_by', uid)
+            .order('updated_at', { ascending: false })
+            .limit(100)
+            .then(function (r) {
+                if (r.error) {
+                    console.error('[WorkBuddy Cloud] db listTaken failed', r.error.message);
+                    return { list: [], err: friendlyDbError(r.error) };
+                }
+                return { list: (r.data || []).map(toRow) };
+            });
+    }).catch(function () {
+        return { list: [], err: '网络异常，加载失败' };
+    });
+}
+
+// 我埋下的宝物数量（个人中心统计用，只取 id 不取内容）
+function countMyBuried() {
+    return auth.getSession().then(function (session) {
+        if (!session || !session.user || !session.user.id) return 0;
+        return cloud.database
+            .from('treasures')
+            .select('id')
+            .eq('owner_id', session.user.id)
+            .limit(200)
+            .then(function (r) {
+                if (r.error || !r.data) return 0;
+                return r.data.length;
+            })
+            .catch(function () { return 0; });
+    }).catch(function () { return 0; });
+}
+
 /* ---------- 照片上云（shared 目录，跨用户可见） ---------- */
 
 // 上传现场照：localPath 为本机文件路径，返回存储对象路径或 { err }
@@ -241,6 +404,11 @@ module.exports = {
     markTaken: markTaken,
     addHint: addHint,
     nearby: nearby,
+    toggleFavorite: toggleFavorite,
+    isFavorite: isFavorite,
+    listFavorites: listFavorites,
+    listTaken: listTaken,
+    countMyBuried: countMyBuried,
     uploadPhoto: uploadPhoto,
     photoUrl: photoUrl
 };
