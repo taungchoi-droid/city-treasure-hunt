@@ -314,3 +314,16 @@
     line-height: 1.6;
     color: rgba(244, 234, 214, 0.3);
 }
+
+/* ---------- 退出登录 ---------- */
+.logout-wrap {
+    margin-top: 28rpx;
+    padding-bottom: 8rpx;
+}
+
+.logout-btn {
+    width: 100%;
+    font-size: 28rpx;
+    color: rgba(244, 234, 214, 0.6);
+    border-color: rgba(244, 234, 214, 0.18);
+}

@@ -15,12 +15,13 @@ Page({
         loggedIn: false,
         userName: '',
         avatarUrl: '',
-        initial: '',
+        idShort: '',           // 无头像时的占位：用户 ID 的两位简写
         shortId: '',
         stats: { favorites: 0, taken: 0, buried: 0 },
-        tab: 'fav',            // fav = 收藏，taken = 已带走
+        tab: 'fav',            // fav = 收藏，taken = 已带走，buried = 我埋下的
         favorites: [],
         taken: [],
+        buried: [],
         loading: false,
         avatarBusy: false,     // 头像上传中
         nicknameBusy: false    // 昵称审核/保存中
@@ -47,15 +48,17 @@ Page({
                     loggedIn: false,
                     userName: '',
                     avatarUrl: '',
-                    initial: '',
+                    idShort: '',
                     shortId: '',
                     favorites: [],
                     taken: [],
+                    buried: [],
                     stats: { favorites: 0, taken: 0, buried: 0 }
                 });
                 return;
             }
             var u = session.user;
+            var cleanId = u.id ? String(u.id).replace(/^wx:/, '') : '';
             // 优先 profiles 表里的自定义昵称/头像，缺省回退微信登录态
             return db.getMyProfile().then(function (p) {
                 var name = (p && p.nickname) || u.name || '寻宝人';
@@ -64,8 +67,8 @@ Page({
                     loggedIn: true,
                     userName: name,
                     avatarUrl: (p && p.avatarUrl) || u.avatarUrl || '',
-                    initial: name.charAt(0),
-                    shortId: u.id ? String(u.id).slice(0, 8) : ''
+                    idShort: cleanId.replace(/[^0-9a-zA-Z]/g, '').slice(0, 2).toUpperCase() || '?',
+                    shortId: cleanId.slice(0, 8)
                 });
                 return that.loadLists();
             });
@@ -78,11 +81,11 @@ Page({
     loadLists: function () {
         var that = this;
         this.setData({ loading: true });
-        return Promise.all([db.listFavorites(), db.listTaken(), db.countMyBuried()])
+        return Promise.all([db.listFavorites(), db.listTaken(), db.listMyBuried()])
             .then(function (res) {
                 var favRes = res[0] || { list: [] };
                 var takenRes = res[1] || { list: [] };
-                var buriedCount = res[2] || 0;
+                var buriedRes = res[2] || { list: [] };
 
                 // 收藏：保留已被带走的记录并标记状态（用户可自行取消收藏）
                 var favorites = (favRes.list || []).map(function (f) {
@@ -114,14 +117,32 @@ Page({
                     };
                 });
 
+                // 我埋下的：含已被别人带走的，标记状态；可寻的点击进详情
+                var buried = (buriedRes.list || []).map(function (b) {
+                    var distText = '';
+                    var player = app.globalData.lastLocation;
+                    if (player && b.status === 'buried') {
+                        distText = geo.fmtDist(geo.dist(player, [b.lng, b.lat]));
+                    }
+                    return {
+                        id: b.id,
+                        name: b.name,
+                        status: b.status,
+                        statusText: b.status === 'buried' ? '可寻' : '已被带走',
+                        gone: b.status !== 'buried',
+                        subText: geo.relTime(b.createdAt) + '埋下' + (distText ? ' · 距你 ' + distText : '')
+                    };
+                });
+
                 that.setData({
                     loading: false,
                     favorites: favorites,
                     taken: taken,
+                    buried: buried,
                     stats: {
                         favorites: favorites.length,
                         taken: taken.length,
-                        buried: buriedCount
+                        buried: buried.length
                     }
                 });
             })
@@ -139,7 +160,9 @@ Page({
         var that = this;
         var tmp = e && e.detail ? e.detail.avatarUrl : '';
         if (!tmp || this.data.avatarBusy) return;
-        this.setData({ avatarBusy: true });
+        var prevAvatar = this.data.avatarUrl;
+        // 先本地预览（临时路径），上传或写库失败再回滚
+        this.setData({ avatarBusy: true, avatarUrl: tmp });
         wx.showLoading({ title: '头像上传中…', mask: true });
         auth.ensureLogin().then(function (session) {
             if (!session) throw { msg: '登录后才能设置头像' };
@@ -155,7 +178,7 @@ Page({
             that.refresh();
         }).catch(function (err) {
             wx.hideLoading();
-            that.setData({ avatarBusy: false });
+            that.setData({ avatarBusy: false, avatarUrl: prevAvatar });
             console.error('[Profile] avatar update failed', err && err.msg ? err.msg : String(err));
             wx.showToast({ title: (err && err.msg) || '头像更新失败', icon: 'none' });
         });
@@ -257,7 +280,55 @@ Page({
         });
     },
 
+    onBuriedTap: function (e) {
+        var id = e.currentTarget.dataset.id;
+        var status = e.currentTarget.dataset.status;
+        if (status !== 'buried') {
+            return wx.showToast({ title: '这个宝物已被带走', icon: 'none' });
+        }
+        wx.navigateTo({ url: '/pages/detail/detail?id=' + id });
+    },
+
+    // 退出登录：只清会话，不动收藏/带走/埋藏记录
+    onLogoutTap: function () {
+        var that = this;
+        wx.showModal({
+            title: '退出登录',
+            content: '退出后收藏和记录都会保留，下次登录还能看到。',
+            confirmText: '退出',
+            confirmColor: '#e05a5a',
+            success: function (res) {
+                if (!res.confirm) return;
+                wx.showLoading({ title: '退出中…', mask: true });
+                auth.signOut().then(function (r) {
+                    wx.hideLoading();
+                    if (!r.ok) {
+                        return wx.showToast({ title: r.msg, icon: 'none' });
+                    }
+                    that.setData({
+                        ready: true,
+                        loggedIn: false,
+                        userName: '',
+                        avatarUrl: '',
+                        idShort: '',
+                        shortId: '',
+                        favorites: [],
+                        taken: [],
+                        buried: [],
+                        tab: 'fav',
+                        stats: { favorites: 0, taken: 0, buried: 0 }
+                    });
+                    wx.showToast({ title: '已退出登录', icon: 'none' });
+                });
+            }
+        });
+    },
+
     goSeek: function () {
         wx.navigateTo({ url: '/pages/map/map' });
+    },
+
+    goBury: function () {
+        wx.navigateTo({ url: '/pages/bury/bury' });
     }
 });

@@ -4,7 +4,7 @@
             <view class="user-row">
                 <button class="avatar-btn" open-type="chooseAvatar" bindchooseavatar="onChooseAvatar">
                     <image wx:if="{{avatarUrl}}" class="avatar-img" src="{{avatarUrl}}" mode="aspectFill" />
-                    <view wx:else class="avatar-text">{{initial}}</view>
+                    <view wx:else class="avatar-text">{{idShort}}</view>
                     <view class="avatar-badge">{{avatarBusy ? '…' : '换'}}</view>
                 </button>
                 <view class="user-meta">
@@ -46,10 +46,13 @@
 
         <view class="tab-bar">
             <view class="tab-item {{tab === 'fav' ? 'tab-active' : ''}}" data-tab="fav" bindtap="switchTab">
-                我的收藏（{{stats.favorites}}）
+                收藏 {{stats.favorites}}
             </view>
             <view class="tab-item {{tab === 'taken' ? 'tab-active' : ''}}" data-tab="taken" bindtap="switchTab">
-                已带走（{{stats.taken}}）
+                已带走 {{stats.taken}}
+            </view>
+            <view class="tab-item {{tab === 'buried' ? 'tab-active' : ''}}" data-tab="buried" bindtap="switchTab">
+                我埋的 {{stats.buried}}
             </view>
         </view>
 
@@ -78,7 +81,7 @@
                     </view>
                 </block>
             </block>
-            <block wx:else>
+            <block wx:elif="{{tab === 'taken'}}">
                 <view wx:if="{{taken.length === 0}}" class="empty-box">
                     <text class="empty-text">还没有带走宝物。走到 30 米内点「我已带走」，这里会记下你的战利品。</text>
                     <button class="btn-ghost empty-btn" size="mini" bindtap="goSeek">去寻宝</button>
@@ -92,10 +95,37 @@
                     </view>
                 </block>
             </block>
+            <block wx:else>
+                <view wx:if="{{buried.length === 0}}" class="empty-box">
+                    <text class="empty-text">还没有埋过宝物。到地图上找个地方藏一个，等别人来找。</text>
+                    <button class="btn-ghost empty-btn" size="mini" bindtap="goBury">去藏宝</button>
+                </view>
+                <block wx:else>
+                    <view
+                        class="list-row"
+                        wx:for="{{buried}}"
+                        wx:key="id"
+                        data-id="{{item.id}}"
+                        data-status="{{item.status}}"
+                        bindtap="onBuriedTap">
+                        <view class="row-main">
+                            <view class="row-title-line">
+                                <text class="row-name {{item.gone ? 'name-gone' : ''}}">{{item.name}}</text>
+                                <text class="row-badge {{item.gone ? 'badge-gone' : ''}}">{{item.statusText}}</text>
+                            </view>
+                            <text class="row-sub">{{item.subText}}</text>
+                        </view>
+                    </view>
+                </block>
+            </block>
         </view>
 
         <view class="foot-tip">
-            <text class="foot-text">收藏仅你自己可见；已带走的宝物会从寻宝地图下架</text>
+            <text class="foot-text">收藏仅你自己可见；埋下的宝物被带走后仍保留在这里</text>
+        </view>
+
+        <view class="logout-wrap">
+            <button class="btn-ghost logout-btn" bindtap="onLogoutTap">退出登录</button>
         </view>
     </block>
 </view>

@@ -66,8 +66,23 @@ function ensureLogin() {
     });
 }
 
+// 退出登录：作废本地会话（后续写操作会重新走微信一键登录）
+function signOut() {
+    return cloud.auth.signOut().then(function (r) {
+        if (r.error) {
+            console.error('[WorkBuddy Cloud] signOut failed', r.error.message);
+            return { ok: false, msg: r.error.message || '退出失败，请重试' };
+        }
+        return { ok: true };
+    }).catch(function (e) {
+        console.error('[WorkBuddy Cloud] signOut threw', e && e.message ? e.message : String(e));
+        return { ok: false, msg: '退出失败，请重试' };
+    });
+}
+
 module.exports = {
     getSession: getSession,
     wechatLogin: wechatLogin,
-    ensureLogin: ensureLogin
+    ensureLogin: ensureLogin,
+    signOut: signOut
 };

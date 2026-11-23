@@ -294,6 +294,40 @@ function listTaken() {
     });
 }
 
+// 我埋下的宝物（owner_id = 我，含已被别人带走的，按埋藏时间倒序）
+function listMyBuried() {
+    return auth.ensureLogin().then(function (session) {
+        if (!session || !session.user) return { needLogin: true, list: [] };
+        return cloud.database
+            .from('treasures')
+            .select('id, name, status, lng, lat, created_at, updated_at')
+            .eq('owner_id', session.user.id)
+            .order('created_at', { ascending: false })
+            .limit(100)
+            .then(function (r) {
+                if (r.error) {
+                    console.error('[WorkBuddy Cloud] db listMyBuried failed', r.error.message);
+                    return { list: [], err: friendlyDbError(r.error) };
+                }
+                return {
+                    list: (r.data || []).map(function (x) {
+                        return {
+                            id: x.id,
+                            name: x.name,
+                            status: x.status,
+                            lng: x.lng,
+                            lat: x.lat,
+                            createdAt: x.created_at,
+                            updatedAt: x.updated_at
+                        };
+                    })
+                };
+            });
+    }).catch(function () {
+        return { list: [], err: '网络异常，加载失败' };
+    });
+}
+
 // 我埋下的宝物数量（个人中心统计用，只取 id 不取内容）
 function countMyBuried() {
     return auth.getSession().then(function (session) {
@@ -399,8 +433,13 @@ function photoUrl(storagePath) {
     if (hit && hit.exp > Date.now()) return Promise.resolve(hit.url);
     return cloud.storage.createSignedUrl(storagePath, 1800)
         .then(function (r) {
-            if (r.error || !r.data) return '';
-            var url = r.data.url || '';
+            if (r.error) {
+                console.error('[WorkBuddy Cloud] sign url failed', r.error.message);
+                return '';
+            }
+            if (!r.data) return '';
+            // SDK 返回字段是 signedUrl（不是 url）；兼容旧字段写法
+            var url = r.data.signedUrl || r.data.url || '';
             if (url) urlCache[storagePath] = { url: url, exp: Date.now() + 20 * 60 * 1000 };
             return url;
         })
@@ -507,6 +546,7 @@ module.exports = {
     isFavorite: isFavorite,
     listFavorites: listFavorites,
     listTaken: listTaken,
+    listMyBuried: listMyBuried,
     countMyBuried: countMyBuried,
     uploadPhoto: uploadPhoto,
     uploadAvatar: uploadAvatar,
