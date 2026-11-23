@@ -2,13 +2,20 @@
     <view class="user-card">
         <block wx:if="{{loggedIn}}">
             <view class="user-row">
-                <image wx:if="{{avatarUrl}}" class="avatar-img" src="{{avatarUrl}}" mode="aspectFill" />
-                <view wx:else class="avatar-text">{{initial}}</view>
+                <button class="avatar-btn" open-type="chooseAvatar" bindchooseavatar="onChooseAvatar">
+                    <image wx:if="{{avatarUrl}}" class="avatar-img" src="{{avatarUrl}}" mode="aspectFill" />
+                    <view wx:else class="avatar-text">{{initial}}</view>
+                    <view class="avatar-badge">{{avatarBusy ? '…' : '换'}}</view>
+                </button>
                 <view class="user-meta">
-                    <text class="user-name">{{userName}}</text>
+                    <view class="name-line">
+                        <text class="user-name">{{userName}}</text>
+                        <view class="name-edit" bindtap="onEditNickname">编辑</view>
+                    </view>
                     <text class="user-id">ID {{shortId}}</text>
                 </view>
             </view>
+            <text class="user-tip">点头像可换图，点「编辑」改昵称；头像和昵称会展示在你留的提示里</text>
         </block>
         <block wx:else>
             <view class="login-box">

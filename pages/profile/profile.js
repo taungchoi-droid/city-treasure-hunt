@@ -1,9 +1,11 @@
 // 个人中心：用户信息 + 我的收藏 + 我已带走
 // 隐私原则：收藏是本人私有数据（云端 RLS 只允许读自己），未登录时不做任何数据请求，
 // 只显示登录引导；已带走的列表同样只查 taken_by = 自己。
+// 头像/昵称存在 profiles 表（公开读：详情页评论要展示；仅本人可写：RLS 限定 user_id）
 var db = require('../../utils/db');
 var geo = require('../../utils/geo');
 var auth = require('../../utils/auth');
+var sec = require('../../utils/sec');
 
 var app = getApp();
 
@@ -19,7 +21,9 @@ Page({
         tab: 'fav',            // fav = 收藏，taken = 已带走
         favorites: [],
         taken: [],
-        loading: false
+        loading: false,
+        avatarBusy: false,     // 头像上传中
+        nicknameBusy: false    // 昵称审核/保存中
     },
 
     onShow: function () {
@@ -52,16 +56,19 @@ Page({
                 return;
             }
             var u = session.user;
-            var name = u.name || '寻宝人';
-            that.setData({
-                ready: true,
-                loggedIn: true,
-                userName: name,
-                avatarUrl: u.avatarUrl || '',
-                initial: name.charAt(0),
-                shortId: u.id ? String(u.id).slice(0, 8) : ''
+            // 优先 profiles 表里的自定义昵称/头像，缺省回退微信登录态
+            return db.getMyProfile().then(function (p) {
+                var name = (p && p.nickname) || u.name || '寻宝人';
+                that.setData({
+                    ready: true,
+                    loggedIn: true,
+                    userName: name,
+                    avatarUrl: (p && p.avatarUrl) || u.avatarUrl || '',
+                    initial: name.charAt(0),
+                    shortId: u.id ? String(u.id).slice(0, 8) : ''
+                });
+                return that.loadLists();
             });
-            return that.loadLists();
         }).catch(function (e) {
             console.error('[Profile] refresh failed', e && e.message ? e.message : String(e));
             that.setData({ ready: true });
@@ -123,6 +130,89 @@ Page({
                 that.setData({ loading: false });
                 wx.showToast({ title: '加载失败，下拉重试', icon: 'none' });
             });
+    },
+
+    /* ---------- 头像 / 昵称 ---------- */
+
+    // 微信头像填写能力：点头像 → 选微信头像或相册 → 临时路径上传云存储 → 写 profiles
+    onChooseAvatar: function (e) {
+        var that = this;
+        var tmp = e && e.detail ? e.detail.avatarUrl : '';
+        if (!tmp || this.data.avatarBusy) return;
+        this.setData({ avatarBusy: true });
+        wx.showLoading({ title: '头像上传中…', mask: true });
+        auth.ensureLogin().then(function (session) {
+            if (!session) throw { msg: '登录后才能设置头像' };
+            return db.uploadAvatar(tmp, session);
+        }).then(function (up) {
+            if (!up || up.err) throw { msg: (up && up.err) || '头像上传失败' };
+            return db.saveProfile({ avatarPath: up.path });
+        }).then(function (saved) {
+            if (!saved || saved.err) throw { msg: (saved && saved.err) || '头像保存失败' };
+            wx.hideLoading();
+            that.setData({ avatarBusy: false });
+            wx.showToast({ title: '头像已更新', icon: 'none' });
+            that.refresh();
+        }).catch(function (err) {
+            wx.hideLoading();
+            that.setData({ avatarBusy: false });
+            console.error('[Profile] avatar update failed', err && err.msg ? err.msg : String(err));
+            wx.showToast({ title: (err && err.msg) || '头像更新失败', icon: 'none' });
+        });
+    },
+
+    // 昵称：弹窗输入 → 内容审核（与藏宝提示同一套）→ upsert 到 profiles
+    onEditNickname: function () {
+        var that = this;
+        if (this.data.nicknameBusy) return;
+        wx.showModal({
+            title: '设置昵称',
+            editable: true,
+            placeholderText: '2-12 个字，会公开展示',
+            content: this.data.userName,
+            success: function (res) {
+                if (!res.confirm) return;
+                // 低版本基础库不支持 editable 弹窗时不会回传 content
+                if (res.content === undefined) {
+                    return wx.showToast({ title: '当前微信版本不支持编辑，请升级后重试', icon: 'none' });
+                }
+                var name = (res.content || '').trim();
+                if (!name) {
+                    return wx.showToast({ title: '昵称不能为空', icon: 'none' });
+                }
+                if (name.length > 12) {
+                    return wx.showToast({ title: '昵称最多 12 个字', icon: 'none' });
+                }
+                that.saveNickname(name);
+            }
+        });
+    },
+
+    saveNickname: function (name) {
+        var that = this;
+        this.setData({ nicknameBusy: true });
+        wx.showLoading({ title: '内容审核中…', mask: true });
+        sec.checkText(name).then(function (check) {
+            if (!check.ok) {
+                wx.hideLoading();
+                that.setData({ nicknameBusy: false });
+                return wx.showToast({ title: check.msg, icon: 'none' });
+            }
+            return db.saveProfile({ nickname: name }).then(function (r) {
+                wx.hideLoading();
+                that.setData({ nicknameBusy: false });
+                if (r.err) {
+                    return wx.showToast({ title: r.err, icon: 'none' });
+                }
+                wx.showToast({ title: '昵称已更新', icon: 'none' });
+                that.refresh();
+            });
+        }).catch(function (e) {
+            wx.hideLoading();
+            that.setData({ nicknameBusy: false });
+            console.error('[Profile] nickname save failed', e && e.message ? e.message : String(e));
+            wx.showToast({ title: '保存失败，请重试', icon: 'none' });
+        });
     },
 
     /* ---------- 登录 ---------- */

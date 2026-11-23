@@ -35,7 +35,8 @@ Page({
     },
 
     onShow: function () {
-        // 每次展示都重新拉一次状态：可能已被别人带走
+        // 每次展示都重新拉一次状态：可能已被别人带走；评论作者资料也重新取一次
+        this._authors = null;
         this.loadTreasure();
         this.loadFavoriteState();
         this.refreshDistance();
@@ -61,19 +62,36 @@ Page({
             }
             that._treasure = t;
             that._lastStatusAt = Date.now();
-            that.setData({
-                treasure: {
-                    name: t.name,
-                    riddle: t.riddle,
-                    photoPath: t.photoPath,
-                    hints: t.hints.map(function (h, idx) {
-                        return { id: 'h' + idx, text: h.text, timeText: geo.relTime(h.at) };
-                    }),
-                    buriedAtText: geo.relTime(t.createdAt)
-                }
+            // 评论作者资料 30 秒缓存，避免 12 秒轮询反复查库；换昵称/头像后自动生效
+            var now = Date.now();
+            if (!that._authors || now - (that._authorsAt || 0) > 30000) {
+                that._authors = {};
+                that._authorsAt = now;
+            }
+            return db.hintAuthors(t.hints, that._authors).then(function (authors) {
+                that.setData({
+                    treasure: {
+                        name: t.name,
+                        riddle: t.riddle,
+                        photoPath: t.photoPath,
+                        hints: t.hints.map(function (h, idx) {
+                            var a = (h.by && authors[h.by]) || null;
+                            var author = (a && a.name) || '寻宝人';
+                            return {
+                                id: 'h' + idx,
+                                text: h.text,
+                                timeText: geo.relTime(h.at),
+                                authorName: author,
+                                authorAvatar: (a && a.avatarUrl) || '',
+                                authorInitial: author.charAt(0)
+                            };
+                        }),
+                        buriedAtText: geo.relTime(t.createdAt)
+                    }
+                });
+                that.refreshDistance();
+                that.loadPhoto();
             });
-            that.refreshDistance();
-            that.loadPhoto();
         });
     },
 

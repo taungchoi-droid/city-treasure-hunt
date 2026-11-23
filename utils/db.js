@@ -313,19 +313,21 @@ function countMyBuried() {
 
 /* ---------- 照片上云（shared 目录，跨用户可见） ---------- */
 
-// 上传现场照：localPath 为本机文件路径，返回存储对象路径或 { err }
+// 上传图片到 shared 云存储：localPath 为本机文件路径，folder 为目录前缀
+// 返回存储对象路径 { path } 或 { err }
 // 实现说明：SDK 小程序适配器当前不支持二进制请求 body（ArrayBuffer 抛「待补」），
 // 因此采用 SDK 签发签名上传 URL（token 在 URL 内授权，无需 SDK 注入凭证），
 // 二进制内容走微信原生 wx.uploadFile 多部分上传通道。
 // err 里带上真实错误码/信息，方便真机排查（域名白名单 / 权限 / 网络）
-function uploadPhoto(localPath, session) {
+function uploadToShared(localPath, session, folder, label) {
+    label = label || '照片';
     return new Promise(function (resolve) {
         var uid = session && session.user && session.user.id ? session.user.id : '';
         if (!uid) {
-            resolve({ err: '未登录，无法上传照片' });
+            resolve({ err: '未登录，无法上传' + label });
             return;
         }
-        var path = cloud.storage.sharedPath(uid, 'treasures/' + Date.now() + '.jpg');
+        var path = cloud.storage.sharedPath(uid, folder + Date.now() + '.jpg');
         cloud.storage.createSignedUploadUrl(path).then(function (signed) {
             if (signed.error || !signed.data || !signed.data.signedUrl) {
                 console.error('[WorkBuddy Cloud] sign upload url failed', JSON.stringify({
@@ -333,7 +335,7 @@ function uploadPhoto(localPath, session) {
                     code: signed.error && signed.error.code || '',
                     message: signed.error && signed.error.message || ''
                 }));
-                resolve({ err: '照片上传失败 ' + ((signed.error && signed.error.message) || '').slice(0, 80) });
+                resolve({ err: label + '上传失败 ' + ((signed.error && signed.error.message) || '').slice(0, 80) });
                 return;
             }
             wx.uploadFile({
@@ -356,7 +358,7 @@ function uploadPhoto(localPath, session) {
                             status: res.statusCode,
                             body: String(res.data || '').slice(0, 200)
                         }));
-                        resolve({ err: '照片上传失败 HTTP ' + res.statusCode });
+                        resolve({ err: label + '上传失败 HTTP ' + res.statusCode });
                     }
                 },
                 fail: function (err) {
@@ -364,7 +366,7 @@ function uploadPhoto(localPath, session) {
                         stage: 'wx.uploadFile',
                         message: err && err.errMsg ? err.errMsg : 'uploadFile failed'
                     }));
-                    resolve({ err: '照片上传失败 ' + (err && err.errMsg ? err.errMsg : '') });
+                    resolve({ err: label + '上传失败 ' + (err && err.errMsg ? err.errMsg : '') });
                 }
             });
         }).catch(function (e) {
@@ -372,20 +374,117 @@ function uploadPhoto(localPath, session) {
                 stage: 'storage-sign',
                 message: e && e.message ? e.message : String(e)
             }));
-            resolve({ err: '照片上传失败 ' + ((e && e.message) ? e.message : String(e)).slice(0, 80) });
+            resolve({ err: label + '上传失败 ' + ((e && e.message) ? e.message : String(e)).slice(0, 80) });
         });
     });
 }
 
-// 取现场照的临时访问链接（需登录，链接短时有效）
+// 现场照：存入 shared/treasures/
+function uploadPhoto(localPath, session) {
+    return uploadToShared(localPath, session, 'treasures/', '照片');
+}
+
+// 头像：存入 shared/avatars/
+function uploadAvatar(localPath, session) {
+    return uploadToShared(localPath, session, 'avatars/', '头像');
+}
+
+// 云存储图片的临时访问链接（需登录，链接短时有效）
+// 20 分钟内复用，避免详情页轮询反复签名；对象路径带时间戳，换图即换 key
+var urlCache = {};
+
 function photoUrl(storagePath) {
     if (!storagePath) return Promise.resolve('');
+    var hit = urlCache[storagePath];
+    if (hit && hit.exp > Date.now()) return Promise.resolve(hit.url);
     return cloud.storage.createSignedUrl(storagePath, 1800)
         .then(function (r) {
             if (r.error || !r.data) return '';
-            return r.data.url || '';
+            var url = r.data.url || '';
+            if (url) urlCache[storagePath] = { url: url, exp: Date.now() + 20 * 60 * 1000 };
+            return url;
         })
         .catch(function () { return ''; });
+}
+
+/* ---------- 用户资料（昵称 / 头像；所有人可读，仅本人可写） ---------- */
+
+// 当前用户资料：优先 profiles 表，缺省回退登录态里的微信昵称/头像
+// 返回 { nickname, avatarPath, avatarUrl }，未登录返回 null
+function getMyProfile() {
+    return auth.getSession().then(function (session) {
+        if (!session || !session.user) return null;
+        var uid = session.user.id;
+        var fallbackName = session.user.name || '';
+        var fallbackAvatar = session.user.avatarUrl || '';
+        return cloud.database
+            .from('profiles')
+            .select('user_id, nickname, avatar_path')
+            .eq('user_id', uid)
+            .maybeSingle()
+            .then(function (r) {
+                var row = (!r.error && r.data) ? r.data : null;
+                var nickname = (row && row.nickname) || fallbackName;
+                var avatarPath = (row && row.avatar_path) || '';
+                if (!avatarPath) {
+                    return { nickname: nickname, avatarPath: '', avatarUrl: fallbackAvatar };
+                }
+                return photoUrl(avatarPath).then(function (url) {
+                    return { nickname: nickname, avatarPath: avatarPath, avatarUrl: url || '' };
+                });
+            });
+    }).catch(function () { return null; });
+}
+
+// 保存资料：upsert 按 user_id 合并（只更新传入字段）；RLS 保证只能写自己
+function saveProfile(patch) {
+    return auth.ensureLogin().then(function (session) {
+        if (!session || !session.user) return { err: '未登录，无法保存资料' };
+        var values = { user_id: session.user.id, updated_at: new Date().toISOString() };
+        if (patch && typeof patch.nickname === 'string') values.nickname = patch.nickname;
+        if (patch && typeof patch.avatarPath === 'string') values.avatar_path = patch.avatarPath;
+        return cloud.database
+            .from('profiles')
+            .upsert(values, { onConflict: 'user_id' })
+            .then(function (w) {
+                if (w.error) {
+                    console.error('[WorkBuddy Cloud] db profile save failed', w.error.message);
+                    return { err: friendlyDbError(w.error) };
+                }
+                return { ok: true };
+            });
+    }).catch(function () {
+        return { err: '网络异常，保存失败' };
+    });
+}
+
+// 评论作者：按 hints 里的 by（uid）批量取昵称与头像，返回 uid → { name, avatarUrl }
+// cache 可复用已有结果（详情页 12 秒轮询时只查新增作者）
+// 查不到资料（历史数据 / 未设置）由页面回退「寻宝人」+ 首字占位
+function hintAuthors(hints, cache) {
+    cache = cache || {};
+    var uids = [];
+    (hints || []).forEach(function (h) {
+        if (h && h.by && !cache[h.by] && uids.indexOf(h.by) < 0) uids.push(h.by);
+    });
+    if (!uids.length) return Promise.resolve(cache);
+    return cloud.database
+        .from('profiles')
+        .select('user_id, nickname, avatar_path')
+        .in('user_id', uids)
+        .then(function (r) {
+            if (r.error || !r.data) return cache;
+            var tasks = r.data.map(function (row) {
+                return photoUrl(row.avatar_path).then(function (url) {
+                    return { uid: row.user_id, name: row.nickname || '寻宝人', avatarUrl: url || '' };
+                });
+            });
+            return Promise.all(tasks).then(function (list) {
+                list.forEach(function (x) { cache[x.uid] = x; });
+                return cache;
+            });
+        })
+        .catch(function () { return cache; });
 }
 
 // 数据库错误 → 用户可读文案
@@ -410,5 +509,9 @@ module.exports = {
     listTaken: listTaken,
     countMyBuried: countMyBuried,
     uploadPhoto: uploadPhoto,
-    photoUrl: photoUrl
+    uploadAvatar: uploadAvatar,
+    photoUrl: photoUrl,
+    getMyProfile: getMyProfile,
+    saveProfile: saveProfile,
+    hintAuthors: hintAuthors
 };

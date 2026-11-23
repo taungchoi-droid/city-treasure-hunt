@@ -54,8 +54,15 @@
     <view class="hints-card" wx:if="{{treasure.hints.length > 0}}">
         <text class="panel-label">寻宝人留下的提示（{{treasure.hints.length}}）</text>
         <view class="hint-row" wx:for="{{treasure.hints}}" wx:key="id">
-            <text class="hint-text">{{item.text}}</text>
-            <text class="hint-time">{{item.timeText}}</text>
+            <image wx:if="{{item.authorAvatar}}" class="hint-avatar" src="{{item.authorAvatar}}" mode="aspectFill" />
+            <view wx:else class="hint-avatar hint-avatar-text">{{item.authorInitial}}</view>
+            <view class="hint-body">
+                <view class="hint-head">
+                    <text class="hint-author">{{item.authorName}}</text>
+                    <text class="hint-time">{{item.timeText}}</text>
+                </view>
+                <text class="hint-text">{{item.text}}</text>
+            </view>
         </view>
     </view>
 </view>
