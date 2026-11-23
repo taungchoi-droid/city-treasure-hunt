@@ -349,10 +349,15 @@ function countMyBuried() {
 
 // 上传图片到 shared 云存储：localPath 为本机文件路径，folder 为目录前缀
 // 返回存储对象路径 { path } 或 { err }
-// 实现说明：SDK 小程序适配器当前不支持二进制请求 body（ArrayBuffer 抛「待补」），
-// 因此采用 SDK 签发签名上传 URL（token 在 URL 内授权，无需 SDK 注入凭证），
-// 二进制内容走微信原生 wx.uploadFile 多部分上传通道。
-// err 里带上真实错误码/信息，方便真机排查（域名白名单 / 权限 / 网络）
+//
+// 实现说明（重要）：SDK 小程序 fetch 适配器只接受字符串 body，ArrayBuffer 会抛
+// 「createMiniProgramFetch: 暂不支持非字符串 body」，所以二进制上传不能走 SDK 的
+// uploadToSignedUrl，必须自己发请求。
+// 服务端签名上传端点与 SDK 一致，期望 **PUT + 原始二进制**；之前用
+// wx.uploadFile(POST + multipart) 虽然返回 2xx，但对象并未落库（storage.objects 为空），
+// 导致 createSignedUrl 失败、头像与现场照都读不出来（个人中心只剩 ID 简写）。
+// 现在以 PUT 为主通道，并在写库前用 createSignedUrl 验证对象确实可读；
+// 主通道失败再回退 multipart POST，同样验证，杜绝「数据库有 path、云端没文件」。
 function uploadToShared(localPath, session, folder, label) {
     label = label || '照片';
     return new Promise(function (resolve) {
@@ -362,55 +367,141 @@ function uploadToShared(localPath, session, folder, label) {
             return;
         }
         var path = cloud.storage.sharedPath(uid, folder + Date.now() + '.jpg');
+        // wx.request / wx.uploadFile 绕过 SDK 请求层，必须手动带这两个鉴权头
+        var headers = {
+            'x-wb-webapp-access-key': cloudMod.publicConfig.publishableKey,
+            'Authorization': 'Bearer ' + session.accessToken
+        };
         cloud.storage.createSignedUploadUrl(path).then(function (signed) {
             if (signed.error || !signed.data || !signed.data.signedUrl) {
                 console.error('[WorkBuddy Cloud] sign upload url failed', JSON.stringify({
                     stage: 'storage-sign',
-                    code: signed.error && signed.error.code || '',
-                    message: signed.error && signed.error.message || ''
+                    code: (signed.error && signed.error.code) || '',
+                    message: (signed.error && signed.error.message) || ''
                 }));
                 resolve({ err: label + '上传失败 ' + ((signed.error && signed.error.message) || '').slice(0, 80) });
                 return;
             }
-            wx.uploadFile({
-                url: signed.data.signedUrl,
-                filePath: localPath,
-                name: 'file',
-                // wx.uploadFile 绕过了 SDK 请求层，必须手动带上与 SDK 相同的鉴权头：
-                // 应用标识（publishableKey）+ 当前会话 token，否则网关返回 401 MISSING_CREDENTIALS
-                header: {
-                    'x-wb-webapp-access-key': cloudMod.publicConfig.publishableKey,
-                    'Authorization': 'Bearer ' + session.accessToken
-                },
-                formData: { cacheControl: '3600' },
-                success: function (res) {
-                    if (res.statusCode >= 200 && res.statusCode < 300) {
-                        resolve({ path: path });
-                    } else {
-                        console.error('[WorkBuddy Cloud] photo upload failed', JSON.stringify({
-                            stage: 'wx.uploadFile',
-                            status: res.statusCode,
-                            body: String(res.data || '').slice(0, 200)
-                        }));
-                        resolve({ err: label + '上传失败 HTTP ' + res.statusCode });
-                    }
-                },
-                fail: function (err) {
-                    console.error('[WorkBuddy Cloud] photo upload failed', JSON.stringify({
-                        stage: 'wx.uploadFile',
-                        message: err && err.errMsg ? err.errMsg : 'uploadFile failed'
-                    }));
-                    resolve({ err: label + '上传失败 ' + (err && err.errMsg ? err.errMsg : '') });
+            var url = signed.data.signedUrl;
+            putBinary(url, localPath, headers).then(function (putRes) {
+                if (!putRes.ok) {
+                    console.warn('[WorkBuddy Cloud] PUT binary failed, fallback multipart', JSON.stringify(putRes));
                 }
+                return verifyUploaded(path).then(function (ok) {
+                    if (ok) return true;
+                    // 主通道没落库，换 multipart POST 再试一次
+                    return postMultipart(url, localPath, headers).then(function (postRes) {
+                        if (!postRes.ok) {
+                            console.error('[WorkBuddy Cloud] multipart fallback failed', JSON.stringify(postRes));
+                            return false;
+                        }
+                        return verifyUploaded(path);
+                    });
+                });
+            }).then(function (ok) {
+                if (ok) {
+                    resolve({ path: path });
+                } else {
+                    console.error('[WorkBuddy Cloud] ' + label + ' upload verify failed', path);
+                    resolve({ err: label + '未写入云存储，请重试' });
+                }
+            }).catch(function (e) {
+                console.error('[WorkBuddy Cloud] upload threw', JSON.stringify({
+                    message: (e && e.message) ? e.message : String(e)
+                }));
+                resolve({ err: label + '上传失败 ' + ((e && e.message) ? e.message : String(e)).slice(0, 80) });
             });
         }).catch(function (e) {
             console.error('[WorkBuddy Cloud] photo sign threw', JSON.stringify({
                 stage: 'storage-sign',
-                message: e && e.message ? e.message : String(e)
+                message: (e && e.message) ? e.message : String(e)
             }));
             resolve({ err: label + '上传失败 ' + ((e && e.message) ? e.message : String(e)).slice(0, 80) });
         });
     });
+}
+
+// 主通道：PUT + 原始二进制，与 SDK uploadToSignedUrl 的请求形态一致
+function putBinary(url, localPath, headers) {
+    return new Promise(function (resolve) {
+        wx.getFileSystemManager().readFile({
+            filePath: localPath,
+            success: function (file) {
+                wx.request({
+                    url: url,
+                    method: 'PUT',
+                    header: {
+                        'x-wb-webapp-access-key': headers['x-wb-webapp-access-key'],
+                        'Authorization': headers['Authorization'],
+                        'Content-Type': 'image/jpeg',
+                        'cache-control': 'max-age=3600',
+                        'x-upsert': 'true'
+                    },
+                    data: file.data,
+                    success: function (res) {
+                        if (res.statusCode >= 200 && res.statusCode < 300) {
+                            resolve({ ok: true });
+                        } else {
+                            resolve({
+                                ok: false,
+                                stage: 'PUT',
+                                status: res.statusCode,
+                                body: String(res.data || '').slice(0, 160)
+                            });
+                        }
+                    },
+                    fail: function (err) {
+                        resolve({ ok: false, stage: 'PUT', message: (err && err.errMsg) ? err.errMsg : 'request failed' });
+                    }
+                });
+            },
+            fail: function (err) {
+                resolve({ ok: false, stage: 'readFile', message: (err && err.errMsg) ? err.errMsg : 'readFile failed' });
+            }
+        });
+    });
+}
+
+// 备用通道：multipart POST（部分网关只接受表单上传）
+function postMultipart(url, localPath, headers) {
+    return new Promise(function (resolve) {
+        wx.uploadFile({
+            url: url,
+            filePath: localPath,
+            name: 'file',
+            header: headers,
+            formData: { cacheControl: '3600' },
+            success: function (res) {
+                if (res.statusCode >= 200 && res.statusCode < 300) {
+                    resolve({ ok: true });
+                } else {
+                    resolve({
+                        ok: false,
+                        stage: 'POST',
+                        status: res.statusCode,
+                        body: String(res.data || '').slice(0, 160)
+                    });
+                }
+            },
+            fail: function (err) {
+                resolve({ ok: false, stage: 'POST', message: (err && err.errMsg) ? err.errMsg : 'uploadFile failed' });
+            }
+        });
+    });
+}
+
+// 写库前必须确认对象真的可读，避免出现「假成功」的 path
+function verifyUploaded(path) {
+    return cloud.storage.createSignedUrl(path, 60)
+        .then(function (r) {
+            if (!r.error && r.data && (r.data.signedUrl || r.data.url)) return true;
+            console.warn('[WorkBuddy Cloud] verify: sdk sign failed',
+                (r.error && r.error.code) || '', (r.error && r.error.message) || '');
+            return signUrlDirect(path, 60).then(function (url) { return !!url; });
+        })
+        .catch(function () {
+            return signUrlDirect(path, 60).then(function (url) { return !!url; });
+        });
 }
 
 // 现场照：存入 shared/treasures/
@@ -423,27 +514,138 @@ function uploadAvatar(localPath, session) {
     return uploadToShared(localPath, session, 'avatars/', '头像');
 }
 
-// 云存储图片的临时访问链接（需登录，链接短时有效）
-// 20 分钟内复用，避免详情页轮询反复签名；对象路径带时间戳，换图即换 key
-var urlCache = {};
+// 云存储图片 → 页面可直接使用的 src。
+// 关键点：微信 <image> 加载网络图校验的是「downloadFile 合法域名」，而本项目云请求
+// 只配了 request 白名单。这里改用 wx.request（走 request 白名单）把图片下成本地文件，
+// 返回本地路径给 <image>，不依赖 downloadFile 白名单；下载失败才退回网络链接。
+// 签名链接 20 分钟内复用，避免详情页轮询反复签名；对象路径带时间戳，换图即换 key。
+var urlCache = {};    // storagePath → { url, exp }
+var localCache = {};  // storagePath → 本地文件路径（本次启动内）
 
 function photoUrl(storagePath) {
     if (!storagePath) return Promise.resolve('');
+    if (localCache[storagePath]) return Promise.resolve(localCache[storagePath]);
+    return signUrl(storagePath, 1800).then(function (url) {
+        if (!url) return '';
+        return downloadToLocal(url, storagePath).then(function (local) {
+            if (local) {
+                localCache[storagePath] = local;
+                return local;
+            }
+            return url;
+        });
+    });
+}
+
+// 生成可访问链接：优先 SDK；失败或拿不到链接时，用 wx.request 直连签名端点
+// （手动携带与上传相同的两个鉴权头，绕开 SDK 内部会话状态差异）
+function signUrl(storagePath, expiresIn) {
     var hit = urlCache[storagePath];
     if (hit && hit.exp > Date.now()) return Promise.resolve(hit.url);
-    return cloud.storage.createSignedUrl(storagePath, 1800)
+    return cloud.storage.createSignedUrl(storagePath, expiresIn)
         .then(function (r) {
-            if (r.error) {
-                console.error('[WorkBuddy Cloud] sign url failed', r.error.message);
-                return '';
+            var url = (!r.error && r.data) ? (r.data.signedUrl || r.data.url || '') : '';
+            if (url) {
+                urlCache[storagePath] = { url: url, exp: Date.now() + 20 * 60 * 1000 };
+                return url;
             }
-            if (!r.data) return '';
-            // SDK 返回字段是 signedUrl（不是 url）；兼容旧字段写法
-            var url = r.data.signedUrl || r.data.url || '';
-            if (url) urlCache[storagePath] = { url: url, exp: Date.now() + 20 * 60 * 1000 };
-            return url;
+            console.warn('[WorkBuddy Cloud] sdk sign failed',
+                (r.error && r.error.code) || '', (r.error && r.error.message) || 'empty data');
+            return signUrlDirect(storagePath, expiresIn).then(function (direct) {
+                if (direct) urlCache[storagePath] = { url: direct, exp: Date.now() + 20 * 60 * 1000 };
+                return direct;
+            });
         })
-        .catch(function () { return ''; });
+        .catch(function (e) {
+            console.warn('[WorkBuddy Cloud] sdk sign threw', (e && e.message) ? e.message : String(e));
+            return signUrlDirect(storagePath, expiresIn);
+        });
+}
+
+// 用 wx.request 取图片二进制并落成本地文件，供 <image> 使用
+function downloadToLocal(url, storagePath) {
+    return new Promise(function (resolve) {
+        var base = '';
+        try { base = wx.env.USER_DATA_PATH; } catch (e) { base = ''; }
+        if (!base) { resolve(''); return; }
+        wx.request({
+            url: url,
+            method: 'GET',
+            responseType: 'arraybuffer',
+            header: { 'x-wb-webapp-access-key': cloudMod.publicConfig.publishableKey },
+            success: function (res) {
+                if (res.statusCode !== 200 || !res.data) { resolve(''); return; }
+                var file = base + '/cth_' + pathKey(storagePath) + '.jpg';
+                wx.getFileSystemManager().writeFile({
+                    filePath: file,
+                    data: res.data,
+                    success: function () { resolve(file); },
+                    fail: function (err) {
+                        console.warn('[WorkBuddy Cloud] write image failed',
+                            (err && err.errMsg) ? err.errMsg : '');
+                        resolve('');
+                    }
+                });
+            },
+            fail: function () { resolve(''); }
+        });
+    });
+}
+
+function pathKey(s) {
+    var h = 0;
+    for (var i = 0; i < s.length; i++) {
+        h = ((h << 5) - h + s.charCodeAt(i)) | 0;
+    }
+    return (h >>> 0).toString(36);
+}
+
+function signUrlDirect(storagePath, expiresIn) {
+    return auth.getSession().then(function (session) {
+        if (!session || !session.accessToken) return '';
+        var url = cloudMod.publicConfig.endpoint + '/.cloud/storage/object/sign/runtime/' + storagePath;
+        return new Promise(function (resolve) {
+            wx.request({
+                url: url,
+                method: 'POST',
+                header: {
+                    'Content-Type': 'application/json',
+                    'x-wb-webapp-access-key': cloudMod.publicConfig.publishableKey,
+                    'Authorization': 'Bearer ' + session.accessToken
+                },
+                data: { expiresIn: expiresIn },
+                success: function (res) {
+                    if (res.statusCode < 200 || res.statusCode >= 300 || !res.data) {
+                        console.error('[WorkBuddy Cloud] direct sign failed HTTP ' + res.statusCode,
+                            String(res.data || '').slice(0, 160));
+                        resolve('');
+                        return;
+                    }
+                    var d = res.data;
+                    if (typeof d === 'string') {
+                        try { d = JSON.parse(d); } catch (e) { d = {}; }
+                    }
+                    var rel = d.signedURL || d.signedUrl || d.url || '';
+                    if (!rel) {
+                        console.error('[WorkBuddy Cloud] direct sign empty', JSON.stringify(d).slice(0, 160));
+                        resolve('');
+                        return;
+                    }
+                    if (/^https?:\/\//.test(rel)) {
+                        resolve(rel);
+                    } else {
+                        resolve(cloudMod.publicConfig.endpoint + '/.cloud/storage' +
+                            (rel.charAt(0) === '/' ? rel : '/' + rel));
+                    }
+                },
+                fail: function (err) {
+                    console.error('[WorkBuddy Cloud] direct sign network failed',
+                        (err && err.errMsg) ? err.errMsg : '');
+                    resolve('');
+                }
+            });
+        });
+    }).catch(function () { return ''; });
 }
 
 /* ---------- 用户资料（昵称 / 头像；所有人可读，仅本人可写） ---------- */

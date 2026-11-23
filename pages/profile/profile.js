@@ -161,6 +161,7 @@ Page({
         var tmp = e && e.detail ? e.detail.avatarUrl : '';
         if (!tmp || this.data.avatarBusy) return;
         var prevAvatar = this.data.avatarUrl;
+        var uploadedPath = '';
         // 先本地预览（临时路径），上传或写库失败再回滚
         this.setData({ avatarBusy: true, avatarUrl: tmp });
         wx.showLoading({ title: '头像上传中…', mask: true });
@@ -169,13 +170,18 @@ Page({
             return db.uploadAvatar(tmp, session);
         }).then(function (up) {
             if (!up || up.err) throw { msg: (up && up.err) || '头像上传失败' };
+            uploadedPath = up.path;
             return db.saveProfile({ avatarPath: up.path });
         }).then(function (saved) {
             if (!saved || saved.err) throw { msg: (saved && saved.err) || '头像保存失败' };
             wx.hideLoading();
             that.setData({ avatarBusy: false });
             wx.showToast({ title: '头像已更新', icon: 'none' });
-            that.refresh();
+            // 不调用 refresh()：它会用云端链接覆盖刚选好的本地预览，
+            // 一旦链接暂时取不到就会闪回 ID 简写。这里只补一个云端链接，失败也保留本地图。
+            return db.photoUrl(uploadedPath).then(function (url) {
+                if (url) that.setData({ avatarUrl: url });
+            });
         }).catch(function (err) {
             wx.hideLoading();
             that.setData({ avatarBusy: false, avatarUrl: prevAvatar });
