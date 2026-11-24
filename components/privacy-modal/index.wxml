@@ -1,0 +1,22 @@
+<view class="pm-mask" wx:if="{{show}}" catchtap="noop" catchtouchmove="noop">
+    <view class="pm-panel" catchtap="noop">
+        <view class="pm-title">用户隐私保护提示</view>
+        <view class="pm-desc">感谢你使用城市寻宝。使用前请阅读并同意
+            <text class="pm-link" bindtap="openContract">《城市寻宝用户隐私保护指引》</text>，我们会在获取你的明示同意后：
+        </view>
+        <view class="pm-list">
+            <view class="pm-item">· 使用位置信息，展示附近宝物并在 30 米内核销带走</view>
+            <view class="pm-item">· 使用摄像头、读取你选中的照片，作为藏宝现场凭证或头像</view>
+            <view class="pm-item">· 使用昵称与头像，在个人中心和寻宝提示中展示</view>
+        </view>
+        <view class="pm-actions">
+            <button class="pm-btn pm-btn-ghost" bindtap="onDisagree">不同意</button>
+            <button
+                id="agree-btn"
+                class="pm-btn pm-btn-primary"
+                open-type="agreePrivacyAuthorization"
+                bindagreeprivacyauthorization="onAgree">同意并继续</button>
+        </view>
+        <view class="pm-foot">不同意也可以浏览，但定位、拍照与头像功能将不可用</view>
+    </view>
+</view>

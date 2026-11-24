@@ -1,4 +1,4 @@
 {
   "navigationBarTitleText": "城市寻宝",
-  "usingComponents": {}
+  "usingComponents": { "privacy-modal": "/components/privacy-modal/index" }
 }

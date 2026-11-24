@@ -23,3 +23,5 @@
         <text class="stat-text">当前埋藏中的宝物：{{buriedCount}}</text>
     </view>
 </view>
+
+<privacy-modal />

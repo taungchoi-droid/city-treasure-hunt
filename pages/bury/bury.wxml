@@ -54,3 +54,5 @@
 
     <button class="btn-primary btn-submit" disabled="{{submitting}}" bindtap="submit">埋下宝物</button>
 </view>
+
+<privacy-modal />

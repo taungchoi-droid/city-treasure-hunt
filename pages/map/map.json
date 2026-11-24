@@ -1,4 +1,4 @@
 {
   "navigationBarTitleText": "附近宝物",
-  "usingComponents": {}
+  "usingComponents": { "privacy-modal": "/components/privacy-modal/index" }
 }

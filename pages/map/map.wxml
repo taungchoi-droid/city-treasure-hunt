@@ -54,3 +54,5 @@
         </scroll-view>
     </view>
 </view>
+
+<privacy-modal />

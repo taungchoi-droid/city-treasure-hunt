@@ -221,7 +221,7 @@ Page({
         });
     },
 
-    /* ---------- 操作一：带走（服务端原子判定） ---------- */
+    /* ---------- 操作一：带走（先二次确认，再走服务端原子判定） ---------- */
     takeTreasure: function () {
         var that = this;
         if (!this.data.positionReady) {
@@ -231,6 +231,24 @@ Page({
             return wx.showToast({ title: '走近到 30 米内才能带走', icon: 'none' });
         }
         if (this.data.taking) return;
+
+        var name = (this._treasure && this._treasure.name) || '这个宝物';
+        // 带走是不可撤销的全局操作（宝物对所有玩家下架），先让用户确认
+        wx.showModal({
+            title: '确认带走宝物',
+            content: '你已经找到并带走「' + name + '」了吗？确认后宝物会从全城地图下架，其他玩家将无法再看到，且不可撤销。',
+            confirmText: '确认带走',
+            cancelText: '再找找',
+            confirmColor: '#e8b04b',
+            success: function (res) {
+                if (res.confirm) that.doTakeTreasure();
+            }
+        });
+    },
+
+    doTakeTreasure: function () {
+        var that = this;
+        var name = (this._treasure && this._treasure.name) || '这个宝物';
         this.setData({ taking: true });
 
         auth.ensureLogin().then(function (session) {
@@ -242,10 +260,20 @@ Page({
                 that.setData({ taking: false });
                 if (result.ok) {
                     that.stopTimer();
-                    wx.showToast({ title: '宝物归你了！', icon: 'success' });
-                    setTimeout(function () {
-                        wx.reLaunch({ url: '/pages/map/map' });
-                    }, 800);
+                    wx.showModal({
+                        title: '带走成功',
+                        content: '「' + name + '」已收入你的战利品，可在「我的 → 已带走」里查看。',
+                        confirmText: '继续寻宝',
+                        cancelText: '查看战利品',
+                        confirmColor: '#e8b04b',
+                        complete: function (r) {
+                            if (r && r.cancel) {
+                                wx.reLaunch({ url: '/pages/profile/profile' });
+                            } else {
+                                wx.reLaunch({ url: '/pages/map/map' });
+                            }
+                        }
+                    });
                 } else if (result.reason === 'gone') {
                     wx.showToast({ title: '手慢了，宝物刚被别人带走', icon: 'none' });
                     that.stopTimer();

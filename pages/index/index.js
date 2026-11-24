@@ -6,6 +6,17 @@ Page({
         buriedCount: 0
     },
 
+    onLoad() {
+        // 进入小程序先完成隐私授权：已同意会直接 success，未同意则触发
+        // app.js 里注册的 onNeedPrivacyAuthorization，由全局弹窗接管
+        if (wx.requirePrivacyAuthorize) {
+            wx.requirePrivacyAuthorize({
+                success: function () {},
+                fail: function () {}
+            });
+        }
+    },
+
     goSeek() {
         wx.navigateTo({ url: '/pages/map/map' });
     },
