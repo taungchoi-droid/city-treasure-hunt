@@ -15,16 +15,23 @@ Page({
         scale: 16,
         markers: [],
         circles: [],
+        polyline: [],
         nearbyList: [],
         nearbyCount: 0,
         manualMode: false,
         posLabel: '',
         // 查看范围（滚轮）
         radiusLabels: config.RADIUS_OPTIONS.map(function (o) { return o.label; }),
-        radiusIndex: 0
+        radiusIndex: 0,
+        // 导航专注模式：只显示目标宝物 + 从当前位置到它的直线，隐藏其它所有宝物标志
+        navMode: false,
+        navTarget: null,      // { id, name, lat, lng }
+        navDistText: '',
+        navWalkText: '',
+        navLoading: false
     },
 
-    onLoad: function () {
+    onLoad: function (options) {
         share.enable(false);
         this._markerIndex = []; // 数字 id -> treasure.id
         this._lastRefreshAt = 0;
@@ -33,6 +40,12 @@ Page({
         var saved = wx.getStorageSync('discover_radius_index');
         if (typeof saved === 'number' && saved >= 0 && saved < config.RADIUS_OPTIONS.length) {
             this.setData({ radiusIndex: saved });
+        }
+        // 从详情页「导航到这里」进入：带上目标 id，进入专注模式
+        this._navId = options && options.navId ? decodeURIComponent(options.navId) : '';
+        if (this._navId) {
+            this.setData({ navMode: true, navLoading: true });
+            this.loadNavTarget();
         }
         this.locate();
     },
@@ -68,6 +81,7 @@ Page({
                     manualMode: true,
                     posLabel: '定位不可用（未授权 / 模拟器）。拖动地图，点「以地图中心定位」手动放置位置'
                 });
+                if (that.data.navMode) that.renderNav();
             }
         });
     },
@@ -98,6 +112,11 @@ Page({
             manualMode: manual,
             posLabel: manual ? '模拟位置：' + lnglat[0].toFixed(5) + ', ' + lnglat[1].toFixed(5) : ''
         });
+        // 导航专注模式：不移动地图中心（交给首次的 includePoints），只刷新路线与距离
+        if (this.data.navMode) {
+            this.renderNav();
+            return;
+        }
         if (!keepCenter) {
             this.setData({ latitude: lnglat[1], longitude: lnglat[0] });
         }
@@ -125,6 +144,7 @@ Page({
 
     /* ---------- 查看范围（滚轮） ---------- */
     onRadiusChange: function (e) {
+        if (this.data.navMode) return; // 导航模式下不显示范围滚轮
         var idx = Number(e.detail.value);
         if (isNaN(idx) || idx < 0 || idx >= config.RADIUS_OPTIONS.length) return;
         this.setData({ radiusIndex: idx, scale: config.RADIUS_OPTIONS[idx].scale });
@@ -140,6 +160,7 @@ Page({
 
     /* ---------- 附近宝物 ---------- */
     refreshNearby: function () {
+        if (this.data.navMode) { this.renderNav(); return; }
         var player = app.globalData.lastLocation;
         if (!player) {
             this.setData({ markers: [], circles: [], nearbyList: [], nearbyCount: 0 });
@@ -221,5 +242,169 @@ Page({
 
     goBury: function () {
         wx.navigateTo({ url: '/pages/bury/bury' });
+    },
+
+    /* ---------- 导航专注模式 ---------- */
+    // 从详情页带 navId 进入：只显示这一个宝物，并用直线连线指向它。
+    // 其它 markers / 模糊圈 / 附近面板全部隐藏，避免干扰寻路。
+    loadNavTarget: function () {
+        var that = this;
+        db.get(this._navId).then(function (t) {
+            if (t && t.__error) {
+                that.setData({ navLoading: false, navError: t.message || '宝物加载失败' });
+                return;
+            }
+            if (!t || t.status !== 'buried') {
+                wx.showToast({ title: '宝物已不在了', icon: 'none' });
+                that.exitNav();
+                return;
+            }
+            that._navTarget = { id: t.id, name: t.name, lat: t.lat, lng: t.lng };
+            that.setData({
+                navTarget: { name: t.name },
+                navLoading: false,
+                navError: '',
+                // 目标可能在视野外，先把中心挪过去；拿到定位后再 includePoints 框住两点
+                latitude: t.lat,
+                longitude: t.lng
+            });
+            that.renderNav();
+        }).catch(function () {
+            that.setData({ navLoading: false, navError: '宝物加载失败，请重试' });
+        });
+    },
+
+    retryNavTarget: function () {
+        if (!this._navId) return;
+        this.setData({ navLoading: true, navError: '' });
+        this.loadNavTarget();
+    },
+
+    // 渲染导航视图：单 marker + 单目标圈 + 起点到终点的直线；持续定位时只更新连线与距离
+    renderNav: function () {
+        if (!this.data.navMode || !this._navTarget) return;
+        var t = this._navTarget;
+        var player = app.globalData.lastLocation;
+        var that = this;
+
+        var markers = [{
+            id: 0,
+            latitude: t.lat,
+            longitude: t.lng,
+            iconPath: '/assets/icons/pin-buried.png',
+            width: 40,
+            height: 40,
+            callout: {
+                content: t.name,
+                display: 'ALWAYS',
+                padding: 8,
+                borderRadius: 8,
+                bgColor: '#1a1408',
+                color: '#e8b04b',
+                fontSize: 13
+            }
+        }];
+        // 只保留目标自身的模糊圈（提示「接近了」），其它宝物的圈全部清掉
+        var circles = [{
+            latitude: t.lat,
+            longitude: t.lng,
+            radius: config.BLUR_RADIUS,
+            color: '#e8962899',
+            fillColor: '#e896281F',
+            strokeWidth: 2
+        }];
+
+        this._markerIndex = [t.id];
+        var patch = {
+            markers: markers,
+            circles: circles,
+            nearbyList: [],
+            nearbyCount: 0,
+            polyline: []
+        };
+
+        if (player) {
+            var d = geo.dist(player, [t.lng, t.lat]);
+            patch.navDistText = geo.fmtDist(d);
+            patch.navWalkText = d < config.CLAIM_RADIUS
+                ? '已进入 30 米核销范围，可以带走了'
+                : '直线方位 · 步行约 ' + Math.max(1, Math.round(d / 80)) + ' 分钟';
+            patch.polyline = [{
+                points: [
+                    { latitude: player[1], longitude: player[0] },
+                    { latitude: t.lat, longitude: t.lng }
+                ],
+                color: '#e8b04b',
+                width: 6,
+                arrowLine: true
+            }];
+        } else {
+            patch.navDistText = this.data.manualMode ? '未定位' : '定位中…';
+            patch.navWalkText = this.data.manualMode
+                ? '定位不可用，可点地图右侧「以地图中心定位」手动放出路线'
+                : '正在获取你的位置，稍候会自动画出路线';
+        }
+
+        this.setData(patch);
+
+        // 首次拿到定位时把「当前位置 + 目标」一起框进视野，之后不再反复跳动地图。
+        // 延迟一拍，等 map / markers 这次 setData 渲染完再调 includePoints，否则可能取不到上下文
+        if (player && !this._navFramed) {
+            this._navFramed = true;
+            setTimeout(function () {
+                var ctx = wx.createMapContext('treasureMap', that);
+                ctx.includePoints({
+                    points: [
+                        { latitude: player[1], longitude: player[0] },
+                        { latitude: t.lat, longitude: t.lng }
+                    ],
+                    padding: [80, 60, 80, 60],
+                    fail: function () { that._navFramed = false; }
+                });
+            }, 180);
+        }
+    },
+
+    // 导航中若手动拖动了地图，可重新把「当前位置 + 目标」框回视野
+    refocusNav: function () {
+        this._navFramed = false;
+        this.renderNav();
+    },
+
+    // 唤起微信内置地图做真实步行导航（GCJ-02 坐标直接传，无需额外 Key）
+    openWxNav: function () {
+        var t = this._navTarget;
+        if (!t) return;
+        wx.openLocation({
+            latitude: t.lat,
+            longitude: t.lng,
+            name: t.name,
+            address: '城市寻宝 · 宝物大致位置',
+            scale: 18,
+            fail: function (e) {
+                console.warn('[Map] openLocation failed', e && e.errMsg ? e.errMsg : '');
+                wx.showToast({ title: '微信地图打开失败，请按箭头线自行前往', icon: 'none' });
+            }
+        });
+    },
+
+    // 结束导航：恢复普通寻宝视图
+    exitNav: function () {
+        this._navId = '';
+        this._navTarget = null;
+        this._navFramed = false;
+        this.setData({
+            navMode: false,
+            navTarget: null,
+            navDistText: '',
+            navWalkText: '',
+            navLoading: false,
+            navError: '',
+            polyline: [],
+            markers: [],
+            circles: [],
+            scale: config.RADIUS_OPTIONS[this.data.radiusIndex].scale
+        });
+        this.refreshNearby();
     }
 });

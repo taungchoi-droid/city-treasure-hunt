@@ -17,70 +17,99 @@
     </view>
 </view>
 <view class="page" wx:else>
-    <view class="head-card">
-        <view class="head-row">
-            <view class="head-main">
-                <text class="t-name">{{treasure.name}}</text>
-                <text class="t-meta">埋于 {{treasure.buriedAtText}}</text>
-            </view>
-            <view class="fav-btn {{favorited ? 'fav-on' : ''}}" bindtap="toggleFavorite">
-                <text class="fav-icon">{{favorited ? '★' : '☆'}}</text>
-                <text class="fav-text">{{favorited ? '已收藏' : '收藏'}}</text>
-            </view>
-        </view>
-        <view class="riddle-box">
-            <text class="riddle-label">谜题</text>
-            <text class="riddle-text">{{treasure.riddle}}</text>
-        </view>
-        <block wx:if="{{treasure.photoPath}}">
-            <image wx:if="{{photoUrl}}" class="t-photo" src="{{photoUrl}}" mode="aspectFill" bindtap="previewPhoto" />
-            <view wx:elif="{{needLogin}}" class="photo-login">
-                <text class="photo-login-tip">登录后可查看藏宝现场照</text>
-                <button class="btn-ghost" size="mini" bindtap="onLoginTap">微信一键登录</button>
-            </view>
-        </block>
-    </view>
-
-    <view class="dist-card">
-        <block wx:if="{{positionReady}}">
-            <text class="dist-value {{inRange ? 'dist-ok' : ''}}" wx:if="{{distText}}">{{distText}}</text>
-            <text class="dist-tip">{{inRange ? '已进入核销范围，可以行动了' : '走到 30 米内解锁操作'}}</text>
-        </block>
-        <block wx:else>
-            <text class="dist-tip">还没拿到你的位置。先在地图页定位，或点击下方按钮重试。</text>
-        </block>
-        <button class="btn-ghost btn-refresh" size="mini" bindtap="reLocate">重新定位</button>
-    </view>
-
-    <view class="actions-card">
-        <button class="btn-primary action-btn" disabled="{{!inRange || taking}}" bindtap="takeTreasure">
-            我已带走（全城下架）
-        </button>
-        <view class="hint-area">
-            <textarea
-                class="hint-input"
-                placeholder="不想带走？追加一条提示，让它继续埋着"
-                value="{{hintInput}}"
-                bindinput="onHintInput"
-                maxlength="100" />
-            <button class="btn-ghost action-btn" disabled="{{!inRange || hintSending}}" bindtap="submitHint">
-                继续埋藏 · 追加提示
-            </button>
-        </view>
-        <button class="btn-ghost action-btn share-detail-btn" open-type="share">喊朋友一起来找</button>
-    </view>
-
-    <view class="hints-card" wx:if="{{treasure.hints.length > 0}}">
-        <text class="panel-label">寻宝人留下的提示（{{treasure.hints.length}}）</text>
-        <view class="hint-row" wx:for="{{treasure.hints}}" wx:key="id">
-            <image wx:if="{{item.authorAvatar}}" class="hint-avatar" src="{{item.authorAvatar}}" mode="aspectFill" />
-            <view wx:else class="hint-avatar hint-avatar-text">{{item.authorInitial}}</view>
-            <view class="hint-body">
-                <view class="hint-head">
-                    <text class="hint-author">{{item.authorName}}</text>
-                    <text class="hint-time">{{item.timeText}}</text>
+    <view class="main-card">
+        <!-- 顶部：宝物身份 + 收藏 -->
+        <view class="mc-head">
+            <view class="head-row">
+                <view class="head-main">
+                    <text class="t-name">{{treasure.name}}</text>
+                    <text class="t-meta">埋于 {{treasure.buriedAtText}}</text>
                 </view>
-                <text class="hint-text">{{item.text}}</text>
+                <view class="fav-btn {{favorited ? 'fav-on' : ''}}" bindtap="toggleFavorite">
+                    <text class="fav-icon">{{favorited ? '★' : '☆'}}</text>
+                    <text class="fav-text">{{favorited ? '已收藏' : '收藏'}}</text>
+                </view>
+            </view>
+            <view class="riddle-box">
+                <text class="riddle-label">谜题</text>
+                <text class="riddle-text">{{treasure.riddle}}</text>
+            </view>
+            <block wx:if="{{treasure.photoPath}}">
+                <image wx:if="{{photoUrl}}" class="t-photo" src="{{photoUrl}}" mode="aspectFill" bindtap="previewPhoto" />
+                <view wx:elif="{{needLogin}}" class="photo-login">
+                    <text class="photo-login-tip">登录后可查看藏宝现场照</text>
+                    <button class="btn-ghost" size="mini" bindtap="onLoginTap">微信一键登录</button>
+                </view>
+            </block>
+        </view>
+
+        <!-- 距离状态条：一行紧凑展示 -->
+        <view class="mc-dist">
+            <view class="dist-left">
+                <block wx:if="{{positionReady}}">
+                    <text class="dist-tip">{{inRange ? '已进入核销范围 · ' : '距你 '}}</text>
+                    <text class="dist-value {{inRange ? 'dist-ok' : ''}}">{{distText}}</text>
+                </block>
+                <block wx:else>
+                    <text class="dist-tip">还没拿到你的位置</text>
+                </block>
+            </view>
+            <view class="dist-right">
+                <view class="dist-locate" bindtap="reLocate">重新定位</view>
+            </view>
+        </view>
+
+        <!-- 主操作：导航 + 带走 并排 -->
+        <view class="mc-actions-wrap">
+            <view class="mc-actions">
+                <button class="btn-ghost mc-btn" bindtap="goNavigate">
+                    <text class="mc-btn-icon">➤</text>
+                    <text>导航到这里</text>
+                </button>
+                <button class="btn-primary mc-btn" disabled="{{!inRange || taking}}" bindtap="takeTreasure">
+                    我已带走
+                </button>
+            </view>
+            <text class="mc-note">{{inRange ? '已进入核销范围，可以带走或留提示' : '走到 30 米内解锁「带走 / 追加提示」'}}</text>
+        </view>
+
+        <!-- 追加提示：默认折叠，点开才展开输入框 -->
+        <view class="mc-hint">
+            <view class="mc-hint-head" bindtap="toggleHintBox">
+                <text class="mc-hint-title">不想带走？留一条提示，让它继续埋着</text>
+                <text class="mc-hint-arrow">{{hintBoxOpen ? '收起 −' : '展开 +'}}</text>
+            </view>
+            <block wx:if="{{hintBoxOpen}}">
+                <textarea
+                    class="hint-input"
+                    placeholder="写一句线索，帮下一个人找到它"
+                    value="{{hintInput}}"
+                    bindinput="onHintInput"
+                    maxlength="100" />
+                <button class="btn-ghost mc-hint-submit" disabled="{{!inRange || hintSending}}" bindtap="submitHint">
+                    继续埋藏 · 追加提示
+                </button>
+            </block>
+        </view>
+
+        <!-- 分享 -->
+        <view class="mc-share">
+            <button class="btn-ghost mc-share-btn" open-type="share">喊朋友一起来找</button>
+        </view>
+
+        <!-- 提示列表 -->
+        <view class="mc-hints" wx:if="{{treasure.hints.length > 0}}">
+            <text class="panel-label">寻宝人留下的提示（{{treasure.hints.length}}）</text>
+            <view class="hint-row" wx:for="{{treasure.hints}}" wx:key="id">
+                <image wx:if="{{item.authorAvatar}}" class="hint-avatar" src="{{item.authorAvatar}}" mode="aspectFill" />
+                <view wx:else class="hint-avatar hint-avatar-text">{{item.authorInitial}}</view>
+                <view class="hint-body">
+                    <view class="hint-head">
+                        <text class="hint-author">{{item.authorName}}</text>
+                        <text class="hint-time">{{item.timeText}}</text>
+                    </view>
+                    <text class="hint-text">{{item.text}}</text>
+                </view>
             </view>
         </view>
     </view>

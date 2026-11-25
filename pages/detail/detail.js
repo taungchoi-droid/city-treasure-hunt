@@ -26,7 +26,8 @@ Page({
         taking: false,
         favorited: false,     // 是否已收藏（未登录时仅展示，点击会先登录）
         favBusy: false,
-        loadError: ''        // 非空表示加载失败（区分「宝物不在」与「网络故障」）
+        loadError: '',       // 非空表示加载失败（区分「宝物不在」与「网络故障」）
+        hintBoxOpen: false   // 「追加提示」默认折叠，展开后才占版面
     },
 
     onLoad: function (options) {
@@ -150,6 +151,19 @@ Page({
     goBackMap: function () {
         this.stopTimer();
         wx.reLaunch({ url: '/pages/map/map' });
+    },
+
+    // 导航：跳到地图页的「专注模式」，只显示这个宝物与到它的路线
+    goNavigate: function () {
+        var id = this.data.id;
+        if (!id) return;
+        this.stopTimer();
+        wx.reLaunch({ url: '/pages/map/map?navId=' + encodeURIComponent(id) });
+    },
+
+    // 追加提示区块折叠开关
+    toggleHintBox: function () {
+        this.setData({ hintBoxOpen: !this.data.hintBoxOpen });
     },
 
     /* ---------- 现场照（云存储签名链接，需登录） ---------- */

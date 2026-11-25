@@ -8,25 +8,46 @@
             scale="{{scale}}"
             markers="{{markers}}"
             circles="{{circles}}"
+            polyline="{{polyline}}"
             show-location="{{!manualMode}}"
             bindmarkertap="onMarkerTap">
 
             <cover-view class="map-top">
-                <cover-view class="chip chip-pos" wx:if="{{viewState === 'loading'}}">正在获取你的位置…</cover-view>
+                <cover-view class="chip chip-nav" wx:if="{{navMode && navLoading}}">正在读取宝物位置…</cover-view>
+                <cover-view class="chip chip-pos" wx:elif="{{navMode && navError}}">{{navError}}</cover-view>
+                <cover-view class="chip chip-nav" wx:elif="{{navMode}}">导航中 · {{navDistText}}</cover-view>
+                <cover-view class="chip chip-pos" wx:elif="{{viewState === 'loading'}}">正在获取你的位置…</cover-view>
                 <cover-view class="chip" wx:elif="{{manualMode}}">{{posLabel}}</cover-view>
                 <cover-view class="chip" wx:else>{{radiusLabels[radiusIndex]}}内发现 {{nearbyCount}} 个宝物</cover-view>
             </cover-view>
 
             <cover-view class="map-actions">
-                <cover-view class="action-btn" bindtap="locate">刷新位置</cover-view>
+                <cover-view wx:if="{{navMode}}" class="action-btn action-alt" bindtap="refocusNav">对准路线</cover-view>
+                <cover-view wx:if="{{navMode}}" class="action-btn action-alt" bindtap="exitNav">结束导航</cover-view>
+                <cover-view wx:if="{{!navMode}}" class="action-btn" bindtap="locate">刷新位置</cover-view>
                 <cover-view wx:if="{{manualMode}}" class="action-btn action-alt" bindtap="useMapCenter">以地图中心定位</cover-view>
                 <cover-view wx:if="{{manualMode}}" class="action-btn action-alt" bindtap="openSetting">打开设置</cover-view>
-                <cover-view class="action-btn action-gold" bindtap="goBury">藏一个</cover-view>
+                <cover-view wx:if="{{!navMode}}" class="action-btn action-gold" bindtap="goBury">藏一个</cover-view>
             </cover-view>
         </map>
     </view>
 
-    <view class="nearby-panel">
+    <!-- 导航专注模式：只显示目标与路线，其它宝物标志/附近列表全部隐藏 -->
+    <view class="nav-panel" wx:if="{{navMode}}">
+        <view class="nav-head">
+            <view class="nav-title">前往「{{navTarget ? navTarget.name : '宝物'}}」</view>
+            <view class="nav-dist">{{navDistText}}</view>
+        </view>
+        <view class="nav-sub">{{navWalkText}}</view>
+        <view class="nav-tip">地图上的箭头线是从你当前位置指向宝物的直线方位，不是沿道路的路线；需要真实步行导航请点下方按钮。</view>
+        <view class="nav-btns">
+            <button class="btn-primary nav-btn" disabled="{{!navTarget || navLoading}}" bindtap="openWxNav">微信地图导航</button>
+            <button class="btn-ghost nav-btn" bindtap="exitNav">结束导航</button>
+        </view>
+        <view class="nav-retry" wx:if="{{navError}}" bindtap="retryNavTarget">重新读取宝物</view>
+    </view>
+
+    <view class="nearby-panel" wx:else>
         <view class="panel-head">
             <view class="panel-title">附近宝物（{{nearbyCount}}）</view>
             <picker
