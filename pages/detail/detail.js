@@ -25,7 +25,8 @@ Page({
         hintSending: false,
         taking: false,
         favorited: false,     // 是否已收藏（未登录时仅展示，点击会先登录）
-        favBusy: false
+        favBusy: false,
+        loadError: ''        // 非空表示加载失败（区分「宝物不在」与「网络故障」）
     },
 
     onLoad: function (options) {
@@ -60,7 +61,21 @@ Page({
 
     loadTreasure: function () {
         var that = this;
-        db.get(this.data.id).then(function (t) {
+        // 用序号丢弃过期响应：页面快速进出或轮询并发时，只认最后一次请求
+        var seq = (this._loadSeq = (this._loadSeq || 0) + 1);
+        return db.get(this.data.id).then(function (t) {
+            if (seq !== that._loadSeq) return;
+            // 网络/服务端故障：显示重试界面，绝不能误判成「宝物已不在了」并自动退回
+            if (t && t.__error) {
+                if (!that.data.treasure) {
+                    that.stopTimer();
+                    that.setData({ loadError: t.message || '网络异常，宝物加载失败' });
+                } else {
+                    // 已有内容的 12 秒轮询偶发失败：保留当前页面，不打断用户操作
+                    console.warn('[Detail] poll failed, keep current content', t.message);
+                }
+                return;
+            }
             if (!t || t.status !== 'buried') {
                 that.stopTimer();
                 wx.showToast({ title: '宝物已不在了', icon: 'none' });
@@ -69,37 +84,72 @@ Page({
             }
             that._treasure = t;
             that._lastStatusAt = Date.now();
-            // 评论作者资料 30 秒缓存，避免 12 秒轮询反复查库；换昵称/头像后自动生效
+
+            // 1) 主体内容立即渲染：谜题、操作区、提示正文都不依赖作者头像
+            that.setData({
+                loadError: '',
+                treasure: {
+                    name: t.name,
+                    riddle: t.riddle,
+                    photoPath: t.photoPath,
+                    hints: t.hints.map(function (h, idx) {
+                        return {
+                            id: 'h' + idx,
+                            text: h.text,
+                            timeText: geo.relTime(h.at),
+                            authorName: '寻宝人',
+                            authorAvatar: '',
+                            authorInitial: '寻'
+                        };
+                    }),
+                    buriedAtText: geo.relTime(t.createdAt)
+                }
+            });
+            that.refreshDistance();
+            that.loadPhoto();
+
+            // 2) 作者头像/昵称异步补齐：失败或超时也不影响正文（头像留占位即可）
             var now = Date.now();
             if (!that._authors || now - (that._authorsAt || 0) > 30000) {
                 that._authors = {};
                 that._authorsAt = now;
             }
             return db.hintAuthors(t.hints, that._authors).then(function (authors) {
-                that.setData({
-                    treasure: {
-                        name: t.name,
-                        riddle: t.riddle,
-                        photoPath: t.photoPath,
-                        hints: t.hints.map(function (h, idx) {
-                            var a = (h.by && authors[h.by]) || null;
-                            var author = (a && a.name) || '寻宝人';
-                            return {
-                                id: 'h' + idx,
-                                text: h.text,
-                                timeText: geo.relTime(h.at),
-                                authorName: author,
-                                authorAvatar: (a && a.avatarUrl) || '',
-                                authorInitial: author.charAt(0)
-                            };
-                        }),
-                        buriedAtText: geo.relTime(t.createdAt)
-                    }
+                if (seq !== that._loadSeq || !that.data.treasure) return;
+                var hints = t.hints.map(function (h, idx) {
+                    var a = (h.by && authors[h.by]) || null;
+                    var author = (a && a.name) || '寻宝人';
+                    return {
+                        id: 'h' + idx,
+                        text: h.text,
+                        timeText: geo.relTime(h.at),
+                        authorName: author,
+                        authorAvatar: (a && a.avatarUrl) || '',
+                        authorInitial: author.charAt(0)
+                    };
                 });
-                that.refreshDistance();
-                that.loadPhoto();
-            });
+                that.setData({ 'treasure.hints': hints });
+            }).catch(function () { /* 作者资料是非关键路径，静默降级 */ });
+        }).catch(function (e) {
+            if (seq !== that._loadSeq) return;
+            console.error('[Detail] loadTreasure failed', e && e.message ? e.message : String(e));
+            if (!that.data.treasure) {
+                that.stopTimer();
+                that.setData({ loadError: '网络异常，宝物加载失败' });
+            }
         });
+    },
+
+    // 加载失败后的重试
+    retryLoad: function () {
+        this.setData({ loadError: '' });
+        this.loadTreasure();
+        this.startTimer();
+    },
+
+    goBackMap: function () {
+        this.stopTimer();
+        wx.reLaunch({ url: '/pages/map/map' });
     },
 
     /* ---------- 现场照（云存储签名链接，需登录） ---------- */

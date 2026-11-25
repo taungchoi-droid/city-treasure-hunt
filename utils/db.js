@@ -50,9 +50,12 @@ function listBuried() {
         .catch(function () { return []; });
 }
 
+// 返回：宝物对象 / null（查无此物）/ { __error: true, message }（网络或服务端故障）
+// 必须区分「查无」与「请求失败」：前者才允许提示宝物不在并退回，
+// 后者应显示重试，否则一次网关抖动就会被误判成宝物已被带走。
 function get(id) {
     var numId = Number(id);
-    if (!isFinite(numId)) return Promise.resolve(null);
+    if (!isFinite(numId)) return Promise.resolve({ __error: true, message: '宝物编号异常' });
     return cloud.database
         .from('treasures')
         .select('id, name, riddle, hints, status, lng, lat, photo_path, owner_id, taken_by, created_at, updated_at')
@@ -61,11 +64,11 @@ function get(id) {
         .then(function (r) {
             if (r.error) {
                 console.error('[WorkBuddy Cloud] db get failed', r.error.message);
-                return null;
+                return { __error: true, message: friendlyDbError(r.error) };
             }
             return toRow(r.data);
         })
-        .catch(function () { return null; });
+        .catch(function () { return { __error: true, message: '网络异常，宝物加载失败' }; });
 }
 
 // 插入前必须已登录（RLS 要求 owner_id = auth.uid()）
@@ -519,15 +522,44 @@ function uploadAvatar(localPath, session) {
 // 只配了 request 白名单。这里改用 wx.request（走 request 白名单）把图片下成本地文件，
 // 返回本地路径给 <image>，不依赖 downloadFile 白名单；下载失败才退回网络链接。
 // 签名链接 20 分钟内复用，避免详情页轮询反复签名；对象路径带时间戳，换图即换 key。
+//
+// 重要：图片是「次要内容」，任何一步卡住都不能拖累正文渲染。整条链路加 6 秒硬超时，
+// 超时直接返回空串（页面显示头像占位），杜绝网关 502 时白屏等 10+ 秒。
 var urlCache = {};    // storagePath → { url, exp }
 var localCache = {};  // storagePath → 本地文件路径（本次启动内）
+var IMAGE_TIMEOUT_MS = 6000;
+
+function withTimeout(promise, ms, fallback) {
+    return new Promise(function (resolve) {
+        var settled = false;
+        var timer = setTimeout(function () {
+            if (settled) return;
+            settled = true;
+            console.warn('[WorkBuddy Cloud] image pipeline timeout', ms + 'ms');
+            resolve(fallback);
+        }, ms);
+        promise.then(function (v) {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            resolve(v);
+        }, function (e) {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            console.warn('[WorkBuddy Cloud] image pipeline failed',
+                (e && e.message) ? e.message : String(e));
+            resolve(fallback);
+        });
+    });
+}
 
 function photoUrl(storagePath) {
     if (!storagePath) return Promise.resolve('');
     if (localCache[storagePath]) return Promise.resolve(localCache[storagePath]);
-    return signUrl(storagePath, 1800).then(function (url) {
+    return withTimeout(signUrl(storagePath, 1800), IMAGE_TIMEOUT_MS, '').then(function (url) {
         if (!url) return '';
-        return downloadToLocal(url, storagePath).then(function (local) {
+        return withTimeout(downloadToLocal(url, storagePath), IMAGE_TIMEOUT_MS, '').then(function (local) {
             if (local) {
                 localCache[storagePath] = local;
                 return local;
@@ -571,6 +603,7 @@ function downloadToLocal(url, storagePath) {
         wx.request({
             url: url,
             method: 'GET',
+            timeout: IMAGE_TIMEOUT_MS,
             responseType: 'arraybuffer',
             header: { 'x-wb-webapp-access-key': cloudMod.publicConfig.publishableKey },
             success: function (res) {
@@ -608,6 +641,7 @@ function signUrlDirect(storagePath, expiresIn) {
             wx.request({
                 url: url,
                 method: 'POST',
+                timeout: IMAGE_TIMEOUT_MS,
                 header: {
                     'Content-Type': 'application/json',
                     'x-wb-webapp-access-key': cloudMod.publicConfig.publishableKey,
@@ -652,6 +686,8 @@ function signUrlDirect(storagePath, expiresIn) {
 
 // 当前用户资料：优先 profiles 表，缺省回退登录态里的微信昵称/头像
 // 返回 { nickname, avatarPath, avatarUrl }，未登录返回 null
+// 注意：这里绝不等待头像签名。签名是次要请求，一旦网关抖动会卡 10 秒，
+// 若在这里 await，个人中心就会白屏。avatarUrl 交给页面异步补全。
 function getMyProfile() {
     return auth.getSession().then(function (session) {
         if (!session || !session.user) return null;
@@ -667,12 +703,11 @@ function getMyProfile() {
                 var row = (!r.error && r.data) ? r.data : null;
                 var nickname = (row && row.nickname) || fallbackName;
                 var avatarPath = (row && row.avatar_path) || '';
-                if (!avatarPath) {
-                    return { nickname: nickname, avatarPath: '', avatarUrl: fallbackAvatar };
-                }
-                return photoUrl(avatarPath).then(function (url) {
-                    return { nickname: nickname, avatarPath: avatarPath, avatarUrl: url || '' };
-                });
+                return {
+                    nickname: nickname,
+                    avatarPath: avatarPath,
+                    avatarUrl: avatarPath ? '' : fallbackAvatar
+                };
             });
     }).catch(function () { return null; });
 }

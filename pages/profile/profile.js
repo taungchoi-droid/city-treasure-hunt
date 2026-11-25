@@ -68,6 +68,7 @@ Page({
             // 优先 profiles 表里的自定义昵称/头像，缺省回退微信登录态
             return db.getMyProfile().then(function (p) {
                 var name = (p && p.nickname) || u.name || '寻宝人';
+                // 先渲染整体页面（昵称、统计、列表入口），不等头像签名
                 that.setData({
                     ready: true,
                     loggedIn: true,
@@ -76,6 +77,16 @@ Page({
                     idShort: cleanId.replace(/[^0-9a-zA-Z]/g, '').slice(0, 2).toUpperCase() || '?',
                     shortId: cleanId.slice(0, 8)
                 });
+                // 自定义头像异步补全：签名失败/超时只影响头像，不拖累页面。
+                // 用序号丢弃过期结果；上传头像时会递增序号，避免异步结果覆盖本地预览。
+                var seq = (that._avatarSeq = (that._avatarSeq || 0) + 1);
+                if (p && p.avatarPath) {
+                    db.photoUrl(p.avatarPath).then(function (url) {
+                        if (url && that.data.loggedIn && seq === that._avatarSeq && !that.data.avatarBusy) {
+                            that.setData({ avatarUrl: url });
+                        }
+                    });
+                }
                 return that.loadLists();
             });
         }).catch(function (e) {
@@ -168,6 +179,8 @@ Page({
         if (!tmp || this.data.avatarBusy) return;
         var prevAvatar = this.data.avatarUrl;
         var uploadedPath = '';
+        // 让 refresh 里正在飞行的头像异步结果失效，避免覆盖本次本地预览
+        this._avatarSeq = (this._avatarSeq || 0) + 1;
         // 先本地预览（临时路径），上传或写库失败再回滚
         this.setData({ avatarBusy: true, avatarUrl: tmp });
         wx.showLoading({ title: '头像上传中…', mask: true });

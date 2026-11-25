@@ -26,3 +26,58 @@ button {
 .btn-disabled {
     opacity: 0.35;
 }
+
+/* ---------- 加载中 / 加载失败状态页 ---------- */
+.state-page {
+    box-sizing: border-box;
+    min-height: 100vh;
+    padding: 32rpx;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.state-card {
+    box-sizing: border-box;
+    width: 100%;
+    border-radius: 24rpx;
+    border: 2rpx solid rgba(232, 176, 75, 0.22);
+    background: rgba(26, 30, 41, 0.85);
+    padding: 56rpx 40rpx;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+}
+
+.state-icon {
+    font-size: 72rpx;
+    color: #e8b04b;
+    margin-bottom: 20rpx;
+}
+
+.state-title {
+    font-size: 34rpx;
+    font-weight: 700;
+    color: #f4ead6;
+    margin-bottom: 16rpx;
+}
+
+.state-desc {
+    font-size: 26rpx;
+    line-height: 1.6;
+    color: rgba(244, 234, 214, 0.65);
+}
+
+.state-hint {
+    font-size: 24rpx;
+    line-height: 1.7;
+    color: rgba(244, 234, 214, 0.4);
+    margin-top: 20rpx;
+}
+
+.state-btn {
+    width: 100%;
+    margin-top: 28rpx;
+    font-size: 28rpx;
+}

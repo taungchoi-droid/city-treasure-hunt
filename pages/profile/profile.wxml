@@ -129,5 +129,12 @@
         </view>
     </block>
 </view>
+<view class="page state-page" wx:else>
+    <view class="state-card">
+        <text class="state-icon">◇</text>
+        <text class="state-title">正在打开个人中心…</text>
+        <text class="state-desc">正在读取你的资料与记录</text>
+    </view>
+</view>
 
 <privacy-modal />

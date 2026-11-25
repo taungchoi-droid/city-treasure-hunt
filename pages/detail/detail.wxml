@@ -1,4 +1,22 @@
-<view class="page" wx:if="{{treasure}}">
+<!-- 三态：加载失败重试 / 首次加载骨架 / 正常内容；条件链内不插入注释 -->
+<view class="page state-page" wx:if="{{loadError}}">
+    <view class="state-card">
+        <text class="state-icon">◇</text>
+        <text class="state-title">宝物没能加载出来</text>
+        <text class="state-desc">{{loadError}}</text>
+        <text class="state-hint">这通常是网络或云端服务暂时不稳定，宝物本身还在，稍后重试即可。</text>
+        <button class="btn-primary state-btn" bindtap="retryLoad">重新加载</button>
+        <button class="btn-ghost state-btn" bindtap="goBackMap">返回寻宝地图</button>
+    </view>
+</view>
+<view class="page state-page" wx:elif="{{!treasure}}">
+    <view class="state-card">
+        <text class="state-icon">◇</text>
+        <text class="state-title">正在打开宝物…</text>
+        <text class="state-desc">正在读取谜题与寻宝提示</text>
+    </view>
+</view>
+<view class="page" wx:else>
     <view class="head-card">
         <view class="head-row">
             <view class="head-main">
