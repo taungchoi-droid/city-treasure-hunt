@@ -4,6 +4,7 @@
 var db = require('../../utils/db');
 var sec = require('../../utils/sec');
 var auth = require('../../utils/auth');
+var share = require('../../utils/share');
 
 var app = getApp();
 
@@ -22,9 +23,14 @@ Page({
     },
 
     onShow: function () {
+        share.enable(false);
         if (!this.data.positionReady) {
             this.locate();
         }
+    },
+
+    onShareAppMessage: function () {
+        return share.homeMessage();
     },
 
     /* ---------- 定位（自动 + 手动兜底） ---------- */

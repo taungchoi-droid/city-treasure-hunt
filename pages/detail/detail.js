@@ -8,6 +8,7 @@ var db = require('../../utils/db');
 var geo = require('../../utils/geo');
 var sec = require('../../utils/sec');
 var auth = require('../../utils/auth');
+var share = require('../../utils/share');
 
 var app = getApp();
 
@@ -28,10 +29,16 @@ Page({
     },
 
     onLoad: function (options) {
+        share.enable(false);
         this.setData({ id: options.id || '' });
         this._treasure = null;
         this._lastStatusAt = 0;
         this.loadTreasure();
+    },
+
+    onShareAppMessage: function () {
+        var t = this._treasure;
+        return share.detailMessage(this.data.id, t && t.name);
     },
 
     onShow: function () {

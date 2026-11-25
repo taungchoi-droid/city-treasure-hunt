@@ -49,6 +49,7 @@
                 继续埋藏 · 追加提示
             </button>
         </view>
+        <button class="btn-ghost action-btn share-detail-btn" open-type="share">喊朋友一起来找</button>
     </view>
 
     <view class="hints-card" wx:if="{{treasure.hints.length > 0}}">

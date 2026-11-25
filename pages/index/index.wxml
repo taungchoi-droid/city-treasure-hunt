@@ -22,6 +22,10 @@
     <view class="stat-line">
         <text class="stat-text">当前埋藏中的宝物：{{buriedCount}}</text>
     </view>
+
+    <view class="share-line">
+        <button class="btn-ghost share-btn" open-type="share">分享给好友，一起寻宝</button>
+    </view>
 </view>
 
 <privacy-modal />

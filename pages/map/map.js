@@ -3,6 +3,7 @@
 var config = require('../../utils/config');
 var db = require('../../utils/db');
 var geo = require('../../utils/geo');
+var share = require('../../utils/share');
 
 var app = getApp();
 
@@ -24,6 +25,7 @@ Page({
     },
 
     onLoad: function () {
+        share.enable(false);
         this._markerIndex = []; // 数字 id -> treasure.id
         this._lastRefreshAt = 0;
         this._fetching = false;
@@ -33,6 +35,10 @@ Page({
             this.setData({ radiusIndex: saved });
         }
         this.locate();
+    },
+
+    onShareAppMessage: function () {
+        return share.homeMessage();
     },
 
     onUnload: function () {

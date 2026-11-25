@@ -101,3 +101,18 @@
     font-size: 24rpx;
     color: rgba(244, 234, 214, 0.45);
 }
+
+.share-line {
+    margin-top: 24rpx;
+}
+
+.share-btn {
+    width: 100%;
+    height: 80rpx;
+    line-height: 80rpx;
+    font-size: 27rpx;
+}
+
+.share-btn::after {
+    border: none;
+}

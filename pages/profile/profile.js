@@ -6,6 +6,7 @@ var db = require('../../utils/db');
 var geo = require('../../utils/geo');
 var auth = require('../../utils/auth');
 var sec = require('../../utils/sec');
+var share = require('../../utils/share');
 
 var app = getApp();
 
@@ -28,7 +29,12 @@ Page({
     },
 
     onShow: function () {
+        share.enable(false);
         this.refresh();
+    },
+
+    onShareAppMessage: function () {
+        return share.homeMessage();
     },
 
     onPullDownRefresh: function () {
