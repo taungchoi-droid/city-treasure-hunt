@@ -39,7 +39,13 @@
             <view class="nav-dist">{{navDistText}}</view>
         </view>
         <view class="nav-sub">{{navWalkText}}</view>
-        <view class="nav-tip">地图上的箭头线是从你当前位置指向宝物的直线方位，不是沿道路的路线；需要真实步行导航请点下方按钮。</view>
+        <view class="nav-tip nav-tip-loading" wx:if="{{navRouteState === 'loading'}}">正在规划沿道路路线…</view>
+        <view class="nav-tip nav-tip-ready" wx:elif="{{navRouteState === 'ready'}}">大数字是直线距离，走进 30 米即可带走；金色路线是沿道路的实际路线。</view>
+        <view class="nav-tip nav-tip-fallback" wx:elif="{{navRouteState === 'fallback'}}">{{navRouteHint}}</view>
+        <view class="nav-tip" wx:else>进入导航后会自动规划沿道路步行路线。</view>
+        <view class="nav-links" wx:if="{{navRouteState === 'ready' || navRouteState === 'fallback'}}">
+            <view class="nav-link" bindtap="replanRoute">重新规划路线</view>
+        </view>
         <view class="nav-btns">
             <button class="btn-primary nav-btn" disabled="{{!navTarget || navLoading}}" bindtap="openWxNav">微信地图导航</button>
             <button class="btn-ghost nav-btn" bindtap="exitNav">结束导航</button>

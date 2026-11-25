@@ -176,6 +176,30 @@
     color: rgba(244, 234, 214, 0.4);
 }
 
+/* 沿道路路线的四种状态提示 */
+.nav-tip-loading {
+    color: #9fb3d9;
+}
+
+.nav-tip-ready {
+    color: rgba(78, 203, 141, 0.78);
+}
+
+.nav-tip-fallback {
+    color: rgba(232, 176, 75, 0.88);
+}
+
+.nav-links {
+    margin-top: 14rpx;
+}
+
+.nav-link {
+    display: inline-block;
+    padding: 6rpx 0;
+    font-size: 24rpx;
+    color: #9fb3d9;
+}
+
 .nav-btns {
     display: flex;
     gap: 20rpx;

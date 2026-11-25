@@ -4,6 +4,7 @@ var config = require('../../utils/config');
 var db = require('../../utils/db');
 var geo = require('../../utils/geo');
 var share = require('../../utils/share');
+var route = require('../../utils/route');
 
 var app = getApp();
 
@@ -23,12 +24,15 @@ Page({
         // 查看范围（滚轮）
         radiusLabels: config.RADIUS_OPTIONS.map(function (o) { return o.label; }),
         radiusIndex: 0,
-        // 导航专注模式：只显示目标宝物 + 从当前位置到它的直线，隐藏其它所有宝物标志
+        // 导航专注模式：只显示目标宝物 + 沿道路路线，隐藏其它所有宝物标志
         navMode: false,
-        navTarget: null,      // { id, name, lat, lng }
-        navDistText: '',
-        navWalkText: '',
-        navLoading: false
+        navTarget: null,      // { name }
+        navDistText: '',      // 与宝物的直线距离（实时，用于判断是否进入 30m 核销范围）
+        navWalkText: '',      // 沿道路距离 / 预计时长 / 降级说明
+        navLoading: false,
+        navError: '',
+        navRouteState: 'idle',   // idle / loading / ready / fallback
+        navRouteHint: ''         // 路线状态说明
     },
 
     onLoad: function (options) {
@@ -36,6 +40,10 @@ Page({
         this._markerIndex = []; // 数字 id -> treasure.id
         this._lastRefreshAt = 0;
         this._fetching = false;
+        // 沿道路路线缓存：放在页面实例上，不进 data，避免大数组反复 setData
+        this._navRoute = null;     // 最近一次成功的路线 { points, distance, duration }
+        this._navRouteAt = null;   // 上次算路的 { lnglat, time }，无论成败都记，用于节流
+        this._routeFetching = false;
         // 恢复上次的查看范围选择
         var saved = wx.getStorageSync('discover_radius_index');
         if (typeof saved === 'number' && saved >= 0 && saved < config.RADIUS_OPTIONS.length) {
@@ -245,7 +253,7 @@ Page({
     },
 
     /* ---------- 导航专注模式 ---------- */
-    // 从详情页带 navId 进入：只显示这一个宝物，并用直线连线指向它。
+    // 从详情页带 navId 进入：只显示这一个宝物，并规划沿道路步行路线。
     // 其它 markers / 模糊圈 / 附近面板全部隐藏，避免干扰寻路。
     loadNavTarget: function () {
         var that = this;
@@ -259,12 +267,18 @@ Page({
                 that.exitNav();
                 return;
             }
+            var prev = that._navTarget;
             that._navTarget = { id: t.id, name: t.name, lat: t.lat, lng: t.lng };
+            // 目标坐标变了就丢掉旧路线，重新规划
+            if (prev && (prev.lat !== t.lat || prev.lng !== t.lng)) {
+                that._navRoute = null;
+                that._navRouteAt = null;
+            }
             that.setData({
                 navTarget: { name: t.name },
                 navLoading: false,
                 navError: '',
-                // 目标可能在视野外，先把中心挪过去；拿到定位后再 includePoints 框住两点
+                // 目标可能在视野外，先把中心挪过去；拿到定位后再 includePoints 框住整条路线
                 latitude: t.lat,
                 longitude: t.lng
             });
@@ -276,11 +290,13 @@ Page({
 
     retryNavTarget: function () {
         if (!this._navId) return;
+        this._navRoute = null;
+        this._navRouteAt = null;
         this.setData({ navLoading: true, navError: '' });
         this.loadNavTarget();
     },
 
-    // 渲染导航视图：单 marker + 单目标圈 + 起点到终点的直线；持续定位时只更新连线与距离
+    // 渲染导航视图：单 marker + 单目标圈 + 沿道路路线；持续定位时只更新线起点与距离
     renderNav: function () {
         if (!this.data.navMode || !this._navTarget) return;
         var t = this._navTarget;
@@ -323,55 +339,179 @@ Page({
             polyline: []
         };
 
+        // 沿道路路线：把首点替换成当前位置，让线始终从脚下出发；拿不到路线时降级为直线
+        var routeData = this._navRoute;
+        var routePoints = null;
+        if (routeData && routeData.ok && routeData.points && routeData.points.length > 1) {
+            routePoints = routeData.points.slice();
+            if (player) routePoints[0] = { latitude: player[1], longitude: player[0] };
+        }
+
         if (player) {
             var d = geo.dist(player, [t.lng, t.lat]);
             patch.navDistText = geo.fmtDist(d);
-            patch.navWalkText = d < config.CLAIM_RADIUS
-                ? '已进入 30 米核销范围，可以带走了'
-                : '直线方位 · 步行约 ' + Math.max(1, Math.round(d / 80)) + ' 分钟';
-            patch.polyline = [{
-                points: [
-                    { latitude: player[1], longitude: player[0] },
-                    { latitude: t.lat, longitude: t.lng }
-                ],
-                color: '#e8b04b',
-                width: 6,
-                arrowLine: true
-            }];
+            if (d < config.CLAIM_RADIUS) {
+                patch.navWalkText = '已进入 30 米核销范围，可以带走了';
+            } else if (routeData && routeData.ok) {
+                var modeText = routeData.mode === 'driving' ? '驾车'
+                    : (routeData.mode === 'bicycling' ? '骑行' : '步行');
+                patch.navWalkText = '沿道路' + modeText + ' ' + geo.fmtDist(routeData.distance) +
+                    ' · 约 ' + Math.max(1, Math.round(routeData.duration)) + ' 分钟';
+            } else {
+                patch.navWalkText = '直线方位 · 步行约 ' + Math.max(1, Math.round(d / 80)) + ' 分钟';
+            }
+
+            if (routePoints) {
+                // 实线 + 深色描边更像导航路线；点多时不用 arrowLine，箭头会糊成一片
+                patch.polyline = [{
+                    points: routePoints,
+                    color: '#e8b04b',
+                    width: 7,
+                    borderColor: '#0f1420',
+                    borderWidth: 2
+                }];
+            } else {
+                // 降级：直线方位（arrowLine 只在两点场景使用）
+                patch.polyline = [{
+                    points: [
+                        { latitude: player[1], longitude: player[0] },
+                        { latitude: t.lat, longitude: t.lng }
+                    ],
+                    color: '#e8b04b',
+                    width: 6,
+                    arrowLine: true
+                }];
+            }
         } else {
             patch.navDistText = this.data.manualMode ? '未定位' : '定位中…';
             patch.navWalkText = this.data.manualMode
                 ? '定位不可用，可点地图右侧「以地图中心定位」手动放出路线'
                 : '正在获取你的位置，稍候会自动画出路线';
+            patch.polyline = [];
         }
 
         this.setData(patch);
 
-        // 首次拿到定位时把「当前位置 + 目标」一起框进视野，之后不再反复跳动地图。
+        // 有定位就尝试规划 / 复用沿道路路线；内部自带节流，不会被持续定位刷爆调用额度
+        if (player) this.maybePlanRoute(player);
+
+        // 首次拿到定位时把整条路线框进视野（道路会绕行，不能只框起终点）。
         // 延迟一拍，等 map / markers 这次 setData 渲染完再调 includePoints，否则可能取不到上下文
         if (player && !this._navFramed) {
             this._navFramed = true;
             setTimeout(function () {
-                var ctx = wx.createMapContext('treasureMap', that);
-                ctx.includePoints({
-                    points: [
+                var pts = routePoints
+                    ? route.sample(routePoints, 40)
+                    : [
                         { latitude: player[1], longitude: player[0] },
                         { latitude: t.lat, longitude: t.lng }
-                    ],
-                    padding: [80, 60, 80, 60],
+                    ];
+                var ctx = wx.createMapContext('treasureMap', that);
+                ctx.includePoints({
+                    points: pts,
+                    padding: [90, 70, 90, 70],
                     fail: function () { that._navFramed = false; }
                 });
             }, 180);
         }
     },
 
-    // 导航中若手动拖动了地图，可重新把「当前位置 + 目标」框回视野
+    /* ---------- 沿道路路线规划（腾讯位置服务） ---------- */
+    // 只在「进入导航 / 位置明显移动 / 手动重新规划」时请求接口，其余时刻复用已有路线，
+    // 避免持续定位每 4 秒一次把 WebService 调用额度刷爆。
+    maybePlanRoute: function (player) {
+        if (!this._navTarget || this._routeFetching) return;
+        var key = (config.TENCENT_MAP_KEY || '').trim();
+        if (!key) {
+            // 持续定位会反复调用 renderNav，这里只在状态变化时 setData，避免无谓刷新
+            if (this.data.navRouteState !== 'fallback') {
+                this.setData({
+                    navRouteState: 'fallback',
+                    navRouteHint: '未配置腾讯位置服务 Key，当前显示直线方位；填入 Key 后会自动切换为沿道路路线'
+                });
+            }
+            return;
+        }
+        var to = [this._navTarget.lng, this._navTarget.lat];
+        var prev = this._navRouteAt;
+        var now = Date.now();
+        // 成败都记 _navRouteAt：失败后同样进入冷却，避免自动无限重试
+        if (prev) {
+            var moved = geo.dist(prev.lnglat, player);
+            var elapsed = now - prev.time;
+            if (moved < (config.ROUTE_REPLAN_DIST || 100) &&
+                elapsed < (config.ROUTE_REPLAN_MIN_MS || 30000)) {
+                return; // 复用已有路线，仅更新线的起点与直线距离
+            }
+        }
+        if (geo.dist(player, to) < 10) return; // 已在宝物跟前，无需算路
+        this.requestRoute(player, to);
+    },
+
+    requestRoute: function (from, to) {
+        if (this._routeFetching) return;
+        var that = this;
+        this._routeFetching = true;
+        this.setData({
+            navRouteState: 'loading',
+            navRouteHint: '正在向腾讯位置服务请求沿道路路线…'
+        });
+        route.plan(from, to).then(function (result) {
+            that._routeFetching = false;
+            // 导航已退出 / 目标已变：丢弃迟到的结果
+            if (!that.data.navMode || !that._navTarget) return;
+            that._navRouteAt = { lnglat: from, time: Date.now() };
+            if (result.ok) {
+                that._navRoute = result;
+                that.setData({
+                    navRouteState: 'ready',
+                    navRouteHint: '已按步行道路规划路线'
+                });
+            } else {
+                that._navRoute = null;
+                that.setData({
+                    navRouteState: 'fallback',
+                    navRouteHint: result.message
+                });
+            }
+            that.renderNav();
+        }).catch(function () {
+            that._routeFetching = false;
+            if (!that.data.navMode) return;
+            that._navRoute = null;
+            that._navRouteAt = { lnglat: from, time: Date.now() };
+            that.setData({
+                navRouteState: 'fallback',
+                navRouteHint: '路线规划异常，已显示直线方位'
+            });
+            that.renderNav();
+        });
+    },
+
+    // 手动强制重算（配置好 Key / 恢复网络后点一下即可）
+    replanRoute: function () {
+        var player = app.globalData.lastLocation;
+        if (!this.data.navMode || !this._navTarget) return;
+        if (!player) {
+            wx.showToast({ title: '还没拿到你的位置，稍后再试', icon: 'none' });
+            return;
+        }
+        if (!(config.TENCENT_MAP_KEY || '').trim()) {
+            wx.showToast({ title: '请先在配置里填腾讯位置服务 Key', icon: 'none' });
+            return;
+        }
+        this._navRoute = null;
+        this._navRouteAt = null;
+        this.requestRoute(player, [this._navTarget.lng, this._navTarget.lat]);
+    },
+
+    // 导航中若手动拖动了地图，可重新把整条路线框回视野
     refocusNav: function () {
         this._navFramed = false;
         this.renderNav();
     },
 
-    // 唤起微信内置地图做真实步行导航（GCJ-02 坐标直接传，无需额外 Key）
+    // 唤起微信内置地图做语音步行导航（GCJ-02 坐标直接传，openLocation 本身不需要 Key）
     openWxNav: function () {
         var t = this._navTarget;
         if (!t) return;
@@ -383,7 +523,7 @@ Page({
             scale: 18,
             fail: function (e) {
                 console.warn('[Map] openLocation failed', e && e.errMsg ? e.errMsg : '');
-                wx.showToast({ title: '微信地图打开失败，请按箭头线自行前往', icon: 'none' });
+                wx.showToast({ title: '微信地图打开失败，请按路线自行前往', icon: 'none' });
             }
         });
     },
@@ -393,6 +533,9 @@ Page({
         this._navId = '';
         this._navTarget = null;
         this._navFramed = false;
+        this._navRoute = null;
+        this._navRouteAt = null;
+        this._routeFetching = false;
         this.setData({
             navMode: false,
             navTarget: null,
@@ -400,6 +543,8 @@ Page({
             navWalkText: '',
             navLoading: false,
             navError: '',
+            navRouteState: 'idle',
+            navRouteHint: '',
             polyline: [],
             markers: [],
             circles: [],
